@@ -25,9 +25,10 @@ module Data.Type.Functor.Product (
     FProd(..), Shape
   , PureProd(..), pureShape
   , PureProdC(..), ReifyConstraintProd(..)
+  , AllConstrainedProd
   -- ** Functions
   , indexProd, indexSing
-  , mapProd, foldMapProd, hmap
+  , mapProd, foldMapProd, hmap, zipProd
   , imapProd, itraverseProd, ifoldMapProd
   , ifoldMapSing, foldMapSing
   -- * Instances
@@ -63,6 +64,7 @@ import           Lens.Micro.Extras
 import           Unsafe.Coerce
 import qualified Data.Singletons.Prelude.List.NonEmpty   as NE
 import qualified Data.Vinyl.Functor                      as V
+import qualified Data.Vinyl.TypeLevel                    as V
 
 fmapIdent :: Fmap IdSym0 as :~: as
 fmapIdent = unsafeCoerce Refl
@@ -130,6 +132,8 @@ type ProdSym2 (f :: Type -> Type) (g :: k -> Type) (as :: f k) = Prod f g as
 type instance Apply (ProdSym0 f) g = ProdSym1 f g
 type instance Apply (ProdSym1 f g) as = Prod f g as
 
+type AllConstrainedProd c as = V.AllConstrained c (ToList as)
+
 pureShape :: PureProd f as => Shape f as
 pureShape = pureProd Proxy
 
@@ -139,6 +143,13 @@ mapProd
     -> Prod f g as
     -> Prod f h as
 mapProd f = runIdentity . traverseProd (Identity . f)
+
+zipProd
+    :: FProd f
+    => Prod f g as
+    -> Prod f h as
+    -> Prod f (g :*: h) as
+zipProd = zipWithProd (:*:)
 
 hmap
     :: FProd f
