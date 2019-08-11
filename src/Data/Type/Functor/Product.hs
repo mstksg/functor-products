@@ -27,7 +27,7 @@ module Data.Type.Functor.Product (
   , PureProdC(..), ReifyConstraintProd(..)
   , AllConstrainedProd
   -- ** Functions
-  , indexProd, indexSing
+  , indexProd, indexSing, singShape
   , mapProd, foldMapProd, hmap, zipProd
   , imapProd, itraverseProd, ifoldMapProd
   , ifoldMapSing, foldMapSing
@@ -109,6 +109,11 @@ class (PFunctor f, SFunctor f, PFoldable f, SFoldable f) => FProd (f :: Type -> 
 
     toRec :: Prod f g as -> Rec g (ToList as)
 
+    withPureProd
+        :: Prod f g as
+        -> (PureProd f as => r)
+        -> r
+
 class PureProd (f :: Type -> Type) (as :: f k) where
     pureProd :: (forall a. g a) -> Prod f g as
 
@@ -136,6 +141,12 @@ type AllConstrainedProd c as = V.AllConstrained c (ToList as)
 
 pureShape :: PureProd f as => Shape f as
 pureShape = pureProd Proxy
+
+singShape
+    :: FProd f
+    => Sing as
+    -> Shape f as
+singShape = mapProd (const Proxy) . singProd
 
 mapProd
     :: FProd f
@@ -340,6 +351,10 @@ instance FProd [] where
             x :& xs -> (x :&) <$> go i xs
 
     toRec = id
+
+    -- withPureProd = \case
+    --   RNil    -> id
+    --   _ :& xs -> \x -> withPureProd @[] xs x
 
 instance RecApplicative as => PureProd [] as where
     pureProd = rpure
@@ -590,6 +605,7 @@ instance FProd NonEmpty where
       NETail i -> \f -> \case
         x :&| xs -> (x :&|) <$> ixProd i f xs
     toRec (x :&| xs) = x :& xs
+    -- withPureProd (_ :&| xs) x = withPureProd xs x
 
 instance RecApplicative as => PureProd NonEmpty (a ':| as) where
     pureProd x = x :&| pureProd x
@@ -683,6 +699,7 @@ instance FProd ((,) j) where
     htraverse _ f (PSnd x) = PSnd <$> f x
     ixProd ISnd f (PSnd x) = PSnd <$> f x
     toRec (PSnd x) = x :& RNil
+    withPureProd (PSnd _) x = x
 
 instance PureProd ((,) j) '(w, a) where
     pureProd x = PSnd x
@@ -742,6 +759,7 @@ instance FProd Identity where
     htraverse _ f (PIdentity x) = PIdentity <$> f x
     ixProd IId f (PIdentity x) = PIdentity <$> f x
     toRec (PIdentity x) = x :& RNil
+    withPureProd (PIdentity _) x = x
 
 instance PureProd Identity ('Identity a) where
     pureProd x = PIdentity x
