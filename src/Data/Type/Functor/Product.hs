@@ -25,6 +25,7 @@ module Data.Type.Functor.Product (
     FProd(..), Shape
   , PureProd(..), pureShape
   , PureProdC(..), ReifyConstraintProd(..)
+  , ProdSing(..)
   , AllConstrainedProd
   -- ** Functions
   , indexProd, indexSing, singShape
@@ -122,6 +123,9 @@ class PureProdC (f :: Type -> Type) c (as :: f k) where
 
 class ReifyConstraintProd (f :: Type -> Type) c (g :: k -> Type) (as :: f k) where
     reifyConstraintProd :: Prod f g as -> Prod f (Dict c V.:. g) as
+
+class FProd f => ProdSing f where
+    prodSing :: Prod f Sing as -> Sing as
 
 data ElemSym0 (f :: Type -> Type) :: f k ~> k ~> Type
 data ElemSym1 (f :: Type -> Type) :: f k -> k ~> Type
@@ -356,6 +360,11 @@ instance FProd [] where
     --   RNil    -> id
     --   _ :& xs -> \x -> withPureProd @[] xs x
 
+instance ProdSing [] where
+    prodSing = \case
+      RNil    -> SNil
+      x :& xs -> x `SCons` prodSing xs
+
 instance RecApplicative as => PureProd [] as where
     pureProd = rpure
 
@@ -433,6 +442,14 @@ instance FProd Maybe where
     toRec = \case
       PNothing -> RNil
       PJust x  -> x :& RNil
+    withPureProd = \case
+      PNothing -> id
+      PJust _  -> id
+
+instance ProdSing Maybe where
+    prodSing = \case
+      PNothing -> SNothing
+      PJust x  -> SJust x
 
 instance PureProd Maybe 'Nothing where
     pureProd _ = PNothing
@@ -515,6 +532,9 @@ instance FProd (Either j) where
     toRec = \case
       PLeft    -> RNil
       PRight x -> x :& RNil
+    withPureProd = \case
+      PLeft    -> id
+      PRight _ -> id
 
 instance PureProd (Either j) ('Left e) where
     pureProd _ = PLeft
@@ -606,6 +626,9 @@ instance FProd NonEmpty where
         x :&| xs -> (x :&|) <$> ixProd i f xs
     toRec (x :&| xs) = x :& xs
     -- withPureProd (_ :&| xs) x = withPureProd xs x
+
+instance ProdSing NonEmpty where
+    prodSing (x :&| xs) = x NE.:%| prodSing xs
 
 instance RecApplicative as => PureProd NonEmpty (a ':| as) where
     pureProd x = x :&| pureProd x
@@ -760,6 +783,9 @@ instance FProd Identity where
     ixProd IId f (PIdentity x) = PIdentity <$> f x
     toRec (PIdentity x) = x :& RNil
     withPureProd (PIdentity _) x = x
+
+instance ProdSing Identity where
+    prodSing (PIdentity x) = SIdentity x
 
 instance PureProd Identity ('Identity a) where
     pureProd x = PIdentity x
