@@ -278,3 +278,34 @@ instance Data.Type.Functor.Product.ProdSing []
 instance forall k (c :: * -> GHC.Types.Constraint) (f :: k -> *) (as :: [k]). Data.Vinyl.Core.ReifyConstraint c f as => Data.Type.Functor.Product.ReifyConstraintProd [] c f as
 instance forall k (c :: k -> GHC.Types.Constraint) (as :: [k]). Data.Vinyl.Core.RPureConstrained c as => Data.Type.Functor.Product.PureProdC [] c as
 instance forall k (as :: [k]). Data.Vinyl.Core.RecApplicative as => Data.Type.Functor.Product.PureProd [] as
+
+module Data.Type.Functor.XProduct
+type XProd f g = (Prod f (XData g) :: f k -> Type)
+fromXProd :: forall f g as. (FProd f, PureProdC f (IsoHKD g) as) => XProd f g as -> Prod f g as
+toXProd :: forall f g as. (FProd f, PureProdC f (IsoHKD g) as) => Prod f g as -> XProd f g as
+mapProdX :: forall f g h as. FProd f => (forall a. HKD g a -> HKD h a) -> XProd f g as -> XProd f h as
+mapProdXEndo :: forall f g as. FProd f => (forall a. HKD g a -> HKD g a) -> XProd f g as -> XProd f g as
+imapProdX :: forall f g h as. FProd f => (forall a. Elem f as a -> HKD g a -> HKD h a) -> XProd f g as -> XProd f h as
+zipWithProdX :: forall f g h j as. FProd f => (forall a. HKD g a -> HKD h a -> HKD j a) -> XProd f g as -> XProd f h as -> XProd f j as
+ixProdX :: FProd f => Elem f as a -> Lens' (XProd f g as) (HKD g a)
+traverseProdX :: forall f g h m as. (FProd f, Applicative m) => (forall a. HKD g a -> m (HKD h a)) -> XProd f g as -> m (XProd f h as)
+traverseProdXEndo :: forall f g m as. (FProd f, Applicative m) => (forall a. HKD g a -> m (HKD g a)) -> XProd f g as -> m (XProd f g as)
+itraverseProdX :: forall f g h m as. (FProd f, Applicative m) => (forall a. Elem f as a -> HKD g a -> m (HKD h a)) -> XProd f g as -> m (XProd f h as)
+foldMapProdX :: forall f g m as. (FProd f, Monoid m) => (forall a. HKD g a -> m) -> XProd f g as -> m
+ifoldMapProdX :: forall f g m as. (FProd f, Monoid m) => (forall a. Elem f as a -> HKD g a -> m) -> XProd f g as -> m
+type XRec (f :: u -> Type) = Rec XData f
+pattern (::&) :: forall a (f :: a -> Type) (r :: a) (rs :: [a]). () => () => HKD f r -> XRec f rs -> XRec f (r : rs)
+infixr 7 ::&
+pattern XRNil :: forall u (f :: u -> Type). () => () => XRec f ([] :: [u])
+type XMaybe f = PMaybe (XData f)
+pattern XNothing :: XMaybe f  'Nothing
+pattern XJust :: HKD f a -> XMaybe f ( 'Just a)
+type XEither f = PEither (XData f)
+pattern XLeft :: XEither f ( 'Left e)
+pattern XRight :: HKD f a -> XEither f ( 'Right a)
+type XNERec f = NERec (XData f)
+pattern (::&|) :: HKD f a -> XRec f as -> XNERec f (a :| as)
+type XTup f = PTup (XData f)
+pattern XSnd :: HKD f a -> XTup f '(w, a)
+type XIdentity f = PIdentity (XData f)
+pattern XIdentity :: HKD f a -> XIdentity f ( 'Identity a)
