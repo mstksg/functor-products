@@ -68,6 +68,7 @@ import           Unsafe.Coerce
 import qualified Data.Singletons.Prelude.List.NonEmpty   as NE
 import qualified Data.Vinyl.Functor                      as V
 import qualified Data.Vinyl.TypeLevel                    as V
+import qualified Data.Vinyl.XRec                         as VX
 
 fmapIdent :: Fmap IdSym0 as :~: as
 fmapIdent = unsafeCoerce Refl
