@@ -7,41 +7,120 @@
 @package functor-products
 @version 0.1.0.0
 
+
+-- | Generalized functor products based on lifted <a>Foldable</a>s.
+--   
+--   For example, <tt><a>Rec</a> f '[a,b,c]</tt> from <i>vinyl</i> contains
+--   an <tt>f a</tt>, <tt>f b</tt>, and <tt>f c</tt>.
+--   
+--   <tt><a>PMaybe</a> f ('Just a)</tt> contains an <tt>f a</tt> and
+--   <tt><a>PMaybe</a> f 'Nothing</tt> contains nothing.
+--   
+--   Also provide data types for "indexing" into each foldable.
 module Data.Type.Functor.Product
+
+-- | Unify different functor products over a Foldable <tt>f</tt>.
 class (PFunctor f, SFunctor f, PFoldable f, SFoldable f) => FProd (f :: Type -> Type) where {
     type family Elem f = (i :: f k -> k -> Type) | i -> f;
     type family Prod f = (p :: (k -> Type) -> f k -> Type) | p -> f;
 }
+
+-- | You can convert a singleton of a foldable value into a foldable
+--   product of singletons. This essentially "breaks up" the singleton into
+--   its individual items. Should be an inverse with <a>prodSing</a>.
 singProd :: FProd f => Sing as -> Prod f Sing as
+
+-- | Collect a collection of singletons back into a single singleton.
+--   Should be an inverse with <a>singProd</a>.
+prodSing :: FProd f => Prod f Sing as -> Sing as
+
+-- | Pair up each item in a foldable product with its index.
 withIndices :: FProd f => Prod f g as -> Prod f (Elem f as :*: g) as
+
+-- | Traverse a foldable functor product with a RankN applicative function,
+--   mapping over each value and sequencing the effects.
+--   
+--   This is the generalization of <a>rtraverse</a>.
 traverseProd :: forall g h as m. (FProd f, Applicative m) => (forall a. g a -> m (h a)) -> Prod f g as -> m (Prod f h as)
+
+-- | Zip together two foldable functor products with a Rank-N function.
 zipWithProd :: FProd f => (forall a. g a -> h a -> j a) -> Prod f g as -> Prod f h as -> Prod f j as
+
+-- | Traverse a foldable functor product with a type-changing function.
 htraverse :: (FProd f, Applicative m) => Sing ff -> (forall a. g a -> m (h (ff @@ a))) -> Prod f g as -> m (Prod f h (Fmap ff as))
+
+-- | A <a>Lens</a> into an item in a foldable functor product, given its
+--   index.
+--   
+--   This roughly generalizes <a>rlens</a>.
 ixProd :: FProd f => Elem f as a -> Lens' (Prod f g as) (g a)
+
+-- | Fold a functor product into a <a>Rec</a>.
 toRec :: FProd f => Prod f g as -> Rec g (ToList as)
+
+-- | Get a <a>PureProd</a> instance from a foldable functor product
+--   providing its shape.
 withPureProd :: FProd f => Prod f g as -> (PureProd f as => r) -> r
+
+-- | Simply witness the <i>shape</i> of an argument (ie, <tt><a>Shape</a>
+--   [] as</tt> witnesses the length of <tt>as</tt>, and <tt><a>Shape</a>
+--   Maybe as</tt> witnesses whether or not <tt>as</tt> is <a>Just</a> or
+--   <a>Nothing</a>).
 type Shape f = (Prod f Proxy :: f k -> Type)
+
+-- | Create <tt><a>Prod</a> f</tt> if you can give a <tt>g a</tt> for every
+--   slot.
 class PureProd (f :: Type -> Type) (as :: f k)
 pureProd :: PureProd f as => (forall a. g a) -> Prod f g as
+
+-- | Create a <a>Shape</a> given an instance of <a>PureProd</a>.
 pureShape :: PureProd f as => Shape f as
+
+-- | Create <tt><a>Prod</a> f</tt> if you can give a <tt>g a</tt> for every
+--   slot, given some constraint.
 class PureProdC (f :: Type -> Type) c (as :: f k)
 pureProdC :: PureProdC f c as => (forall a. c a => g a) -> Prod f g as
+
+-- | Pair up each item in a <tt><a>Prod</a> f</tt> with a witness that
+--   <tt>f a</tt> satisfies some constraint.
 class ReifyConstraintProd (f :: Type -> Type) c (g :: k -> Type) (as :: f k)
 reifyConstraintProd :: ReifyConstraintProd f c g as => Prod f g as -> Prod f (Dict c :. g) as
-class FProd f => ProdSing f
-prodSing :: ProdSing f => Prod f Sing as -> Sing as
+
+-- | A convenient wrapper over <a>AllConstrained</a> that works for any
+--   Foldable <tt>f</tt>.
 type AllConstrainedProd c as = AllConstrained c (ToList as)
+
+-- | Use an <a>Elem</a> to index a value out of a <a>Prod</a>.
 indexProd :: FProd f => Elem f as a -> Prod f g as -> g a
 
 -- | Extract the item from the container witnessed by the <a>Elem</a>
 indexSing :: forall f as a. FProd f => Elem f as a -> Sing as -> Sing a
+
+-- | Convert a <tt><a>Sing</a> as</tt> into a <tt><a>Shape</a> f as</tt>,
+--   witnessing the shape of of <tt>as</tt> but dropping all of its values.
 singShape :: FProd f => Sing as -> Shape f as
+
+-- | Map a RankN function over a <a>Prod</a>. The generalization of
+--   <a>rmap</a>.
 mapProd :: FProd f => (forall a. g a -> h a) -> Prod f g as -> Prod f h as
+
+-- | Map a RankN function over a <a>Prod</a> and collect the results as a
+--   <a>Monoid</a>.
 foldMapProd :: (FProd f, Monoid m) => (forall a. g a -> m) -> Prod f g as -> m
+
+-- | Map a type-changing function over every item in a <a>Prod</a>.
 hmap :: FProd f => Sing ff -> (forall a. g a -> h (ff @@ a)) -> Prod f g as -> Prod f h (Fmap ff as)
+
+-- | Zip together the values in two <a>Prod</a>s.
 zipProd :: FProd f => Prod f g as -> Prod f h as -> Prod f (g :*: h) as
+
+-- | <a>mapProd</a>, but with access to the index at each element.
 imapProd :: FProd f => (forall a. Elem f as a -> g a -> h a) -> Prod f g as -> Prod f h as
+
+-- | <a>traverseProd</a>, but with access to the index at each element.
 itraverseProd :: (FProd f, Applicative m) => (forall a. Elem f as a -> g a -> m (h a)) -> Prod f g as -> m (Prod f h as)
+
+-- | <a>foldMapProd</a>, but with access to the index at each element.
 ifoldMapProd :: (FProd f, Monoid m) => (forall a. Elem f as a -> g a -> m) -> Prod f g as -> m
 
 -- | <tt>foldMapUni</tt> but with access to the index.
@@ -49,6 +128,15 @@ ifoldMapSing :: forall f k (as :: f k) m. (FProd f, Monoid m) => (forall a. Elem
 
 -- | A <a>foldMap</a> over all items in a collection.
 foldMapSing :: forall f k (as :: f k) m. (FProd f, Monoid m) => (forall (a :: k). Sing a -> m) -> Sing as -> m
+
+-- | Rearrange or permute the items in a <a>Prod</a> based on a <a>Prod</a>
+--   of indices.
+--   
+--   <pre>
+--   <a>selectProd</a> (<a>IS</a> <a>IZ</a> <a>:&amp;</a> IZ :&amp; <a>RNil</a>) ("hi" :&amp; "bye" :&amp; "ok" :&amp; RNil)
+--        == "bye" :&amp; "hi" :&amp; RNil
+--   </pre>
+selectProd :: FProd f => Prod f (Elem f as) bs -> Prod f g as -> Prod f g bs
 
 -- | An implementation of equality testing for all <a>FProd</a> instances,
 --   as long as each of the items are instances of <a>Eq</a>.
@@ -69,9 +157,29 @@ data Rec (a :: u -> Type) (b :: [u]) :: forall u. () => u -> Type -> [u] -> Type
 infixr 7 :&
 
 -- | Witness an item in a type-level list by providing its index.
+--   
+--   The number of <a>IS</a>s correspond to the item's position in the
+--   list.
+--   
+--   <pre>
+--   <a>IZ</a>         :: <a>Index</a> '[5,10,2] 5
+--   <a>IS</a> <a>IZ</a>      :: <a>Index</a> '[5,10,2] 10
+--   <a>IS</a> (<a>IS</a> <a>IZ</a>) :: <a>Index</a> '[5,10,2] 2
+--   </pre>
 data Index :: [k] -> k -> Type
 [IZ] :: Index (a : as) a
 [IS] :: Index bs a -> Index (b : bs) a
+
+-- | A stronger version of <a>withPureProd</a> for <a>Rec</a>, providing a
+--   <a>RecApplicative</a> instance as well.
+withPureProdList :: Rec f as -> ((RecApplicative as, PureProd [] as) => r) -> r
+
+-- | A <tt><a>PMaybe</a> f 'Nothing</tt> contains nothing, and a
+--   <tt><a>PMaybe</a> f ('Just a)</tt> contains an <tt>f a</tt>.
+--   
+--   In practice this can be useful to write polymorphic
+--   functions/abstractions that contain an argument that can be "turned
+--   off" for different instances.
 data PMaybe :: (k -> Type) -> Maybe k -> Type
 [PNothing] :: PMaybe f  'Nothing
 [PJust] :: f a -> PMaybe f ( 'Just a)
@@ -80,14 +188,23 @@ data PMaybe :: (k -> Type) -> Maybe k -> Type
 --   <a>Maybe</a> is <a>Just</a>.
 data IJust :: Maybe k -> k -> Type
 [IJust] :: IJust ( 'Just a) a
+
+-- | A <tt><a>PEither</a> f ('Left e)</tt> contains <tt><a>Sing</a> e</tt>,
+--   and a <tt><a>PMaybe</a> f ('Right a)</tt> contains an <tt>f a</tt>.
+--   
+--   In practice this can be useful in the same situatinos that
+--   <a>PMaybe</a> can, but with an extra value in the case where value
+--   <tt>f</tt> is "turned off" with <a>Left</a>.
 data PEither :: (k -> Type) -> Either j k -> Type
-[PLeft] :: PEither f ( 'Left e)
+[PLeft] :: Sing e -> PEither f ( 'Left e)
 [PRight] :: f a -> PEither f ( 'Right a)
 
 -- | Witness an item in a type-level <tt><a>Either</a> j</tt> by proving
 --   the <a>Either</a> is <a>Right</a>.
 data IRight :: Either j k -> k -> Type
 [IRight] :: IRight ( 'Right a) a
+
+-- | A non-empty version of <a>Rec</a>.
 data NERec :: (k -> Type) -> NonEmpty k -> Type
 [:&|] :: f a -> Rec f as -> NERec f (a :| as)
 infixr 5 :&|
@@ -97,12 +214,28 @@ infixr 5 :&|
 data NEIndex :: NonEmpty k -> k -> Type
 [NEHead] :: NEIndex (a :| as) a
 [NETail] :: Index as a -> NEIndex (b :| as) a
+
+-- | A stronger version of <a>withPureProd</a> for <a>NERec</a>, providing
+--   a <a>RecApplicative</a> instance as well.
+withPureProdNE :: f a -> Rec f as -> ((RecApplicative as, PureProd NonEmpty (a :| as)) => r) -> r
+
+-- | A <a>PTup</a> tuples up some singleton with some value; a
+--   <tt><a>PTup</a> f '(w, a)</tt> contains a <tt><a>Sing</a> w</tt> and
+--   an <tt>f a</tt>.
+--   
+--   This can be useful for carrying along some witness aside a functor
+--   value.
 data PTup :: (k -> Type) -> (j, k) -> Type
-[PSnd] :: f a -> PTup f '(w, a)
+[PTup] :: Sing w -> f a -> PTup f '(w, a)
 
 -- | Trivially witness an item in the second field of a type-level tuple.
 data ISnd :: (j, k) -> k -> Type
 [ISnd] :: ISnd '(a, b) b
+
+-- | A <a>PIdentity</a> is a trivial functor product; it is simply the
+--   functor, itself, alone. <tt><a>PIdentity</a> f (<a>Identity</a>
+--   a)</tt> is simply <tt>f a</tt>. This may be useful in conjunction with
+--   other combinators.
 data PIdentity :: (k -> Type) -> Identity k -> Type
 [PIdentity] :: f a -> PIdentity f ( 'Identity a)
 
@@ -207,10 +340,10 @@ instance forall k j (a :: j) (b :: k). GHC.Read.Read (Data.Type.Functor.Product.
 instance forall j k (as :: (j, k)) (a :: k). GHC.Classes.Eq (Data.Type.Functor.Product.ISnd as a)
 instance forall j k (as :: (j, k)) (a :: k). GHC.Classes.Ord (Data.Type.Functor.Product.ISnd as a)
 instance forall j k (as :: (j, k)) (a :: k) (i :: Data.Type.Functor.Product.ISnd as a). GHC.Show.Show (Data.Type.Functor.Product.SISnd as a i)
-instance forall j k (f :: k -> *) (a :: k) (w :: j). GHC.Show.Show (f a) => GHC.Show.Show (Data.Type.Functor.Product.PTup f '(w, a))
-instance forall j k (f :: k -> *) (a :: k) (w :: j). GHC.Read.Read (f a) => GHC.Read.Read (Data.Type.Functor.Product.PTup f '(w, a))
-instance forall j k (f :: k -> *) (a :: k) (w :: j). GHC.Classes.Eq (f a) => GHC.Classes.Eq (Data.Type.Functor.Product.PTup f '(w, a))
-instance forall j k (f :: k -> *) (a :: k) (w :: j). GHC.Classes.Ord (f a) => GHC.Classes.Ord (Data.Type.Functor.Product.PTup f '(w, a))
+instance forall k j (w :: j) (f :: k -> *) (a :: k). (GHC.Show.Show (Data.Singletons.Internal.Sing w), GHC.Show.Show (f a)) => GHC.Show.Show (Data.Type.Functor.Product.PTup f '(w, a))
+instance forall k j (w :: j) (f :: k -> *) (a :: k). (GHC.Read.Read (Data.Singletons.Internal.Sing w), GHC.Read.Read (f a)) => GHC.Read.Read (Data.Type.Functor.Product.PTup f '(w, a))
+instance forall k j (w :: j) (f :: k -> *) (a :: k). (GHC.Classes.Eq (Data.Singletons.Internal.Sing w), GHC.Classes.Eq (f a)) => GHC.Classes.Eq (Data.Type.Functor.Product.PTup f '(w, a))
+instance forall k j (w :: j) (f :: k -> *) (a :: k). (GHC.Classes.Ord (Data.Singletons.Internal.Sing w), GHC.Classes.Ord (f a)) => GHC.Classes.Ord (Data.Type.Functor.Product.PTup f '(w, a))
 instance forall k (as :: Data.Functor.Identity.Identity k) (a :: k). GHC.Show.Show (Data.Type.Functor.Product.IIdentity as a)
 instance forall k (a :: k). GHC.Read.Read (Data.Type.Functor.Product.IIdentity ('Data.Functor.Identity.Identity a) a)
 instance forall k (as :: Data.Functor.Identity.Identity k) (a :: k). GHC.Classes.Eq (Data.Type.Functor.Product.IIdentity as a)
@@ -221,7 +354,6 @@ instance forall a1 (f :: a1 -> *) (a2 :: a1). GHC.Read.Read (f a2) => GHC.Read.R
 instance forall a1 (f :: a1 -> *) (a2 :: a1). GHC.Classes.Eq (f a2) => GHC.Classes.Eq (Data.Type.Functor.Product.PIdentity f ('Data.Functor.Identity.Identity a2))
 instance forall a1 (f :: a1 -> *) (a2 :: a1). GHC.Classes.Ord (f a2) => GHC.Classes.Ord (Data.Type.Functor.Product.PIdentity f ('Data.Functor.Identity.Identity a2))
 instance Data.Type.Functor.Product.FProd Data.Functor.Identity.Identity
-instance Data.Type.Functor.Product.ProdSing Data.Functor.Identity.Identity
 instance forall k (a :: k). Data.Type.Functor.Product.PureProd Data.Functor.Identity.Identity ('Data.Functor.Identity.Identity a)
 instance forall a1 (c :: a1 -> GHC.Types.Constraint) (a2 :: a1). c a2 => Data.Type.Functor.Product.PureProdC Data.Functor.Identity.Identity c ('Data.Functor.Identity.Identity a2)
 instance forall a1 (c :: * -> GHC.Types.Constraint) (g :: a1 -> *) (a2 :: a1). c (g a2) => Data.Type.Functor.Product.ReifyConstraintProd Data.Functor.Identity.Identity c g ('Data.Functor.Identity.Identity a2)
@@ -229,14 +361,13 @@ instance forall k (x :: k). Data.Singletons.Internal.SingI 'Data.Type.Functor.Pr
 instance forall k (as :: Data.Functor.Identity.Identity k) (a :: k). Data.Singletons.Internal.SingKind (Data.Type.Functor.Product.IIdentity as a)
 instance forall k (as :: Data.Functor.Identity.Identity k) (a :: k). Data.Singletons.Decide.SDecide (Data.Type.Functor.Product.IIdentity as a)
 instance Data.Type.Functor.Product.FProd ((,) j)
-instance forall k j (w :: j) (a :: k). Data.Type.Functor.Product.PureProd ((,) j) '(w, a)
-instance forall k (c :: k -> GHC.Types.Constraint) (a :: k) j (w :: j). c a => Data.Type.Functor.Product.PureProdC ((,) j) c '(w, a)
+instance forall k j (w :: j) (a :: k). Data.Singletons.Internal.SingI w => Data.Type.Functor.Product.PureProd ((,) j) '(w, a)
+instance forall k j (w :: j) (c :: k -> GHC.Types.Constraint) (a :: k). (Data.Singletons.Internal.SingI w, c a) => Data.Type.Functor.Product.PureProdC ((,) j) c '(w, a)
 instance forall k (c :: * -> GHC.Types.Constraint) (g :: k -> *) (a :: k) j (w :: j). c (g a) => Data.Type.Functor.Product.ReifyConstraintProd ((,) j) c g '(w, a)
 instance forall j (a :: j) k (b :: k). Data.Singletons.Internal.SingI 'Data.Type.Functor.Product.ISnd
 instance forall j k (as :: (j, k)) (a :: k). Data.Singletons.Internal.SingKind (Data.Type.Functor.Product.ISnd as a)
 instance forall j k (as :: (j, k)) (a :: k). Data.Singletons.Decide.SDecide (Data.Type.Functor.Product.ISnd as a)
 instance Data.Type.Functor.Product.FProd GHC.Base.NonEmpty
-instance Data.Type.Functor.Product.ProdSing GHC.Base.NonEmpty
 instance forall k (as :: [k]) (a :: k). Data.Vinyl.Core.RecApplicative as => Data.Type.Functor.Product.PureProd GHC.Base.NonEmpty (a 'GHC.Base.:| as)
 instance forall a1 (c :: a1 -> GHC.Types.Constraint) (a2 :: a1) (as :: [a1]). (c a2, Data.Vinyl.Core.RPureConstrained c as) => Data.Type.Functor.Product.PureProdC GHC.Base.NonEmpty c (a2 'GHC.Base.:| as)
 instance forall a1 (c :: * -> GHC.Types.Constraint) (g :: a1 -> *) (a2 :: a1) (as :: [a1]). (c (g a2), Data.Vinyl.Core.ReifyConstraint c g as) => Data.Type.Functor.Product.ReifyConstraintProd GHC.Base.NonEmpty c g (a2 'GHC.Base.:| as)
@@ -244,11 +375,11 @@ instance forall k (a :: k) (as :: [k]). Data.Singletons.Internal.SingI 'Data.Typ
 instance forall k (b :: k) (as :: [k]) (a :: k) (i :: Data.Type.Functor.Product.Index as a). Data.Singletons.Internal.SingI i => Data.Singletons.Internal.SingI ('Data.Type.Functor.Product.NETail i)
 instance forall k (as :: GHC.Base.NonEmpty k) (a :: k). Data.Singletons.Internal.SingKind (Data.Type.Functor.Product.NEIndex as a)
 instance forall k (as :: GHC.Base.NonEmpty k) (a :: k). Data.Singletons.Decide.SDecide (Data.Type.Functor.Product.NEIndex as a)
-instance forall k j (f :: k -> *) (as :: Data.Either.Either j k). Data.Type.Functor.Product.ReifyConstraintProd (Data.Either.Either j) GHC.Show.Show f as => GHC.Show.Show (Data.Type.Functor.Product.PEither f as)
+instance forall k j (f :: k -> *) (as :: Data.Either.Either j k). (Data.Singletons.Prelude.Show.SShow j, Data.Type.Functor.Product.ReifyConstraintProd (Data.Either.Either j) GHC.Show.Show f as) => GHC.Show.Show (Data.Type.Functor.Product.PEither f as)
 instance Data.Type.Functor.Product.FProd (Data.Either.Either j)
-instance forall k j (e :: j). Data.Type.Functor.Product.PureProd (Data.Either.Either j) ('Data.Either.Left e)
+instance forall k j (e :: j). Data.Singletons.Internal.SingI e => Data.Type.Functor.Product.PureProd (Data.Either.Either j) ('Data.Either.Left e)
 instance forall k j (a :: k). Data.Type.Functor.Product.PureProd (Data.Either.Either j) ('Data.Either.Right a)
-instance forall k j (c :: k -> GHC.Types.Constraint) (e :: j). Data.Type.Functor.Product.PureProdC (Data.Either.Either j) c ('Data.Either.Left e)
+instance forall k j (e :: j) (c :: k -> GHC.Types.Constraint). Data.Singletons.Internal.SingI e => Data.Type.Functor.Product.PureProdC (Data.Either.Either j) c ('Data.Either.Left e)
 instance forall b (c :: b -> GHC.Types.Constraint) (a :: b) j. c a => Data.Type.Functor.Product.PureProdC (Data.Either.Either j) c ('Data.Either.Right a)
 instance forall k j (c :: * -> GHC.Types.Constraint) (g :: k -> *) (e :: j). Data.Type.Functor.Product.ReifyConstraintProd (Data.Either.Either j) c g ('Data.Either.Left e)
 instance forall b (c :: * -> GHC.Types.Constraint) (g :: b -> *) (a :: b) j. c (g a) => Data.Type.Functor.Product.ReifyConstraintProd (Data.Either.Either j) c g ('Data.Either.Right a)
@@ -259,7 +390,6 @@ instance forall k (f :: k -> *) (as :: GHC.Maybe.Maybe k). Data.Type.Functor.Pro
 instance forall k (f :: k -> *) (as :: GHC.Maybe.Maybe k). Data.Type.Functor.Product.ReifyConstraintProd GHC.Maybe.Maybe GHC.Classes.Eq f as => GHC.Classes.Eq (Data.Type.Functor.Product.PMaybe f as)
 instance forall k (f :: k -> *) (as :: GHC.Maybe.Maybe k). (Data.Type.Functor.Product.ReifyConstraintProd GHC.Maybe.Maybe GHC.Classes.Eq f as, Data.Type.Functor.Product.ReifyConstraintProd GHC.Maybe.Maybe GHC.Classes.Ord f as) => GHC.Classes.Ord (Data.Type.Functor.Product.PMaybe f as)
 instance Data.Type.Functor.Product.FProd GHC.Maybe.Maybe
-instance Data.Type.Functor.Product.ProdSing GHC.Maybe.Maybe
 instance Data.Type.Functor.Product.PureProd GHC.Maybe.Maybe 'GHC.Maybe.Nothing
 instance forall k (a :: k). Data.Type.Functor.Product.PureProd GHC.Maybe.Maybe ('GHC.Maybe.Just a)
 instance forall k (c :: k -> GHC.Types.Constraint). Data.Type.Functor.Product.PureProdC GHC.Maybe.Maybe c 'GHC.Maybe.Nothing
@@ -274,38 +404,116 @@ instance forall k (b :: k) (bs :: [k]) (a :: k) (i :: Data.Type.Functor.Product.
 instance forall k (as :: [k]) (a :: k). Data.Singletons.Internal.SingKind (Data.Type.Functor.Product.Index as a)
 instance forall k (as :: [k]) (a :: k). Data.Singletons.Decide.SDecide (Data.Type.Functor.Product.Index as a)
 instance Data.Type.Functor.Product.FProd []
-instance Data.Type.Functor.Product.ProdSing []
 instance forall k (c :: * -> GHC.Types.Constraint) (f :: k -> *) (as :: [k]). Data.Vinyl.Core.ReifyConstraint c f as => Data.Type.Functor.Product.ReifyConstraintProd [] c f as
 instance forall k (c :: k -> GHC.Types.Constraint) (as :: [k]). Data.Vinyl.Core.RPureConstrained c as => Data.Type.Functor.Product.PureProdC [] c as
 instance forall k (as :: [k]). Data.Vinyl.Core.RecApplicative as => Data.Type.Functor.Product.PureProd [] as
 
+
+-- | Generalize <a>Data.Vinyl.XRec</a>: provides a version of products in
+--   <a>Data.Type.Functor.Product</a> that "erases" newtype wrappers and
+--   other syntactical noise.
+--   
+--   <a>Data.Type.Functor.Product</a> is the "main functionality", but this
+--   module provides an alternative interface that may be more convenient
+--   in some situations, in the same way that <a>XRec</a> can be more
+--   convenient than <a>Rec</a> in some situations.
 module Data.Type.Functor.XProduct
+
+-- | Generalize <a>XRec</a> to work over any foldable <tt>f</tt> that
+--   implements <a>FProd</a>. See <a>Prod</a> and <a>FProd</a> for more
+--   information.
 type XProd f g = (Prod f (XData g) :: f k -> Type)
+
+-- | Convert an <a>XProd</a> back into a regular ol' <a>Prod</a>.
 fromXProd :: forall f g as. (FProd f, PureProdC f (IsoHKD g) as) => XProd f g as -> Prod f g as
+
+-- | Convert a <a>Prod</a> into a fancy <a>XProd</a>.
 toXProd :: forall f g as. (FProd f, PureProdC f (IsoHKD g) as) => Prod f g as -> XProd f g as
+
+-- | Convenient wrapper over <a>mapProd</a> that lets you deal with the
+--   "simplified" inner types. Generalizes <a>rmapX</a>.
 mapProdX :: forall f g h as. FProd f => (forall a. HKD g a -> HKD h a) -> XProd f g as -> XProd f h as
+
+-- | A version of <a>mapProdX</a> that doesn't change the context
+--   <tt>g</tt>; this can be easier for type inference in some situations.
+--   Generalizes <a>rmapXEndo</a>.
 mapProdXEndo :: forall f g as. FProd f => (forall a. HKD g a -> HKD g a) -> XProd f g as -> XProd f g as
+
+-- | A version of <a>mapProdX</a> that passes along the index <a>Elem</a>
+--   with each value. This can help with type inference in some situations.
 imapProdX :: forall f g h as. FProd f => (forall a. Elem f as a -> HKD g a -> HKD h a) -> XProd f g as -> XProd f h as
+
+-- | Zip two <a>XProd</a>s together by supplying a function that works on
+--   their simplified <a>HKD</a> values.
 zipWithProdX :: forall f g h j as. FProd f => (forall a. HKD g a -> HKD h a -> HKD j a) -> XProd f g as -> XProd f h as -> XProd f j as
+
+-- | Given an index into an <a>XProd</a>, provides a lens into the
+--   simplified item that that index points to.
 ixProdX :: FProd f => Elem f as a -> Lens' (XProd f g as) (HKD g a)
+
+-- | Convenient wrapper over <a>traverseProd</a> that lets you deal with
+--   the "simplified" inner types.
 traverseProdX :: forall f g h m as. (FProd f, Applicative m) => (forall a. HKD g a -> m (HKD h a)) -> XProd f g as -> m (XProd f h as)
+
+-- | A version of <a>traverseProdX</a> that doesn't change the context
+--   <tt>g</tt>; this can be easier for type inference in some situations.
 traverseProdXEndo :: forall f g m as. (FProd f, Applicative m) => (forall a. HKD g a -> m (HKD g a)) -> XProd f g as -> m (XProd f g as)
+
+-- | A version of <a>traverseProdX</a> that passes along the index
+--   <a>Elem</a> with each value. This can help with type inference in some
+--   situations.
 itraverseProdX :: forall f g h m as. (FProd f, Applicative m) => (forall a. Elem f as a -> HKD g a -> m (HKD h a)) -> XProd f g as -> m (XProd f h as)
+
+-- | Convenient wrapper over <a>foldMapProd</a> that lets you deal with the
+--   "simplified" inner types.
 foldMapProdX :: forall f g m as. (FProd f, Monoid m) => (forall a. HKD g a -> m) -> XProd f g as -> m
+
+-- | A version of <a>foldMapProdX</a> that passes along the index
+--   <a>Elem</a> with each value. This can help with type inference in some
+--   situations.
 ifoldMapProdX :: forall f g m as. (FProd f, Monoid m) => (forall a. Elem f as a -> HKD g a -> m) -> XProd f g as -> m
 type XRec (f :: u -> Type) = Rec XData f
 pattern (::&) :: forall a (f :: a -> Type) (r :: a) (rs :: [a]). () => () => HKD f r -> XRec f rs -> XRec f (r : rs)
 infixr 7 ::&
 pattern XRNil :: forall u (f :: u -> Type). () => () => XRec f ([] :: [u])
+
+-- | <a>PMaybe</a> over <a>HKD</a>-d types.
 type XMaybe f = PMaybe (XData f)
+
+-- | <a>PNothing</a> for <a>XMaybe</a>.
 pattern XNothing :: XMaybe f  'Nothing
+
+-- | <a>PJust</a> for <a>XMaybe</a>: allows you to provide the simplified
+--   type.
 pattern XJust :: HKD f a -> XMaybe f ( 'Just a)
+
+-- | <a>PEither</a> over <a>HKD</a>-d types.
 type XEither f = PEither (XData f)
-pattern XLeft :: XEither f ( 'Left e)
+
+-- | <a>PLeft</a> for <a>XEither</a>.
+pattern XLeft :: Sing e -> XEither f ( 'Left e)
+
+-- | <a>PRight</a> for <a>XEither</a>: allows you to provide the simplified
+--   type.
 pattern XRight :: HKD f a -> XEither f ( 'Right a)
+
+-- | <a>NERec</a> over <a>HKD</a>-d types.
 type XNERec f = NERec (XData f)
+
+-- | A version of <a>:&amp;|</a> that allows you to provide the simplified
+--   type, for <a>XNERec</a>.
 pattern (::&|) :: HKD f a -> XRec f as -> XNERec f (a :| as)
+
+-- | <a>PTup</a> over <a>HKD</a>-d types.
 type XTup f = PTup (XData f)
-pattern XSnd :: HKD f a -> XTup f '(w, a)
+
+-- | A version of <a>PTup</a> that allows you to provide the simplified
+--   type, for <a>XTup</a>.
+pattern XTup :: Sing w -> HKD f a -> XTup f '(w, a)
+
+-- | <a>PIdentity</a> over <a>HKD</a>-d types.
 type XIdentity f = PIdentity (XData f)
+
+-- | A version of <a>PIdentity</a> that allows you to provide the
+--   simplified type, for <a>XIdentity</a>.
 pattern XIdentity :: HKD f a -> XIdentity f ( 'Identity a)
