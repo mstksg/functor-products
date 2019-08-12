@@ -32,6 +32,7 @@ module Data.Type.Functor.Product (
   , mapProd, foldMapProd, hmap, zipProd
   , imapProd, itraverseProd, ifoldMapProd
   , ifoldMapSing, foldMapSing
+  , eqProd, compareProd
   -- * Instances
   , Rec(..), Index(..)
   , PMaybe(..), IJust(..)
@@ -53,6 +54,7 @@ import           Data.Functor.Classes
 import           Data.Functor.Identity
 import           Data.Kind
 import           Data.List.NonEmpty                      (NonEmpty(..))
+import           Data.Semigroup
 import           Data.Singletons
 import           Data.Singletons.Decide
 import           Data.Singletons.Prelude hiding          (Elem, ElemSym0, ElemSym1, ElemSym2)
@@ -233,12 +235,37 @@ foldMapSing
     -> m
 foldMapSing f = ifoldMapSing (const f)
 
+-- | An implementation of equality testing for all 'FProd' instances, as
+-- long as each of the items are instances of 'Eq'.
+eqProd
+    :: (FProd f, ReifyConstraintProd f Eq g as)
+    => Prod f g as
+    -> Prod f g as
+    -> Bool
+eqProd xs = getAll
+          . foldMapProd getConst
+          . zipWithProd (\(V.Compose (Dict x)) y -> Const (All (x == y)))
+                (reifyConstraintProd @_ @Eq xs)
+
+-- | An implementation of order comparison for all 'FProd' instances, as
+-- long as each of the items are instances of 'Ord'.
+compareProd
+    :: (FProd f, ReifyConstraintProd f Ord g as)
+    => Prod f g as
+    -> Prod f g as
+    -> Ordering
+compareProd xs = foldMapProd getConst
+            . zipWithProd (\(V.Compose (Dict x)) y -> Const (compare x y))
+                  (reifyConstraintProd @_ @Ord xs)
+
 -- | Witness an item in a type-level list by providing its index.
 data Index :: [k] -> k -> Type where
     IZ :: Index (a ': as) a
     IS :: Index bs a -> Index (b ': bs) a
 
 deriving instance Show (Index as a)
+deriving instance Eq (Index as a)
+deriving instance Ord (Index as a)
 
 -- | Kind-indexed singleton for 'Index'.  Provided as a separate data
 -- declaration to allow you to use these at the type level.  However, the
@@ -356,9 +383,15 @@ instance FProd [] where
 
     toRec = id
 
-    -- withPureProd = \case
-    --   RNil    -> id
-    --   _ :& xs -> \x -> withPureProd @[] xs x
+    withPureProd = withPureProdList
+
+withPureProdList
+    :: Rec f as
+    -> ((RecApplicative as, PureProd [] as) => r)
+    -> r
+withPureProdList = \case
+    RNil    -> id
+    _ :& xs -> withPureProdList xs
 
 instance ProdSing [] where
     prodSing = \case
@@ -380,6 +413,9 @@ data IJust :: Maybe k -> k -> Type where
     IJust :: IJust ('Just a) a
 
 deriving instance Show (IJust as a)
+deriving instance Read (IJust ('Just a) a)
+deriving instance Eq (IJust as a)
+deriving instance Ord (IJust as a)
 
 -- | Kind-indexed singleton for 'IJust'.  Provided as a separate data
 -- declaration to allow you to use these at the type level.  However, the
@@ -414,6 +450,10 @@ instance ReifyConstraintProd Maybe Show f as => Show (PMaybe f as) where
     showsPrec d xs = case reifyConstraintProd @_ @Show xs of
       PNothing                   -> showString "PNothing"
       PJust (V.Compose (Dict x)) -> showsUnaryWith showsPrec "PJust" d x
+instance ReifyConstraintProd Maybe Eq f as => Eq (PMaybe f as) where
+    (==) = eqProd
+instance (ReifyConstraintProd Maybe Eq f as, ReifyConstraintProd Maybe Ord f as) => Ord (PMaybe f as) where
+    compare = compareProd
 
 instance FProd Maybe where
     type instance Elem Maybe = IJust
@@ -472,6 +512,9 @@ data IRight :: Either j k -> k -> Type where
     IRight :: IRight ('Right a) a
 
 deriving instance Show (IRight as a)
+deriving instance Read (IRight ('Right a) a)
+deriving instance Eq (IRight as a)
+deriving instance Ord (IRight as a)
 
 -- | Kind-indexed singleton for 'IRight'.  Provided as a separate data
 -- declaration to allow you to use these at the type level.  However, the
@@ -558,6 +601,8 @@ data NEIndex :: NonEmpty k -> k -> Type where
     NETail :: Index as a -> NEIndex (b ':| as) a
 
 deriving instance Show (NEIndex as a)
+deriving instance Eq (NEIndex as a)
+deriving instance Ord (NEIndex as a)
 
 -- | Kind-indexed singleton for 'NEIndex'.  Provided as a separate data
 -- declaration to allow you to use these at the type level.  However, the
@@ -605,6 +650,8 @@ data NERec :: (k -> Type) -> NonEmpty k -> Type where
 infixr 5 :&|
 
 deriving instance (Show (f a), RMap as, ReifyConstraint Show f as, RecordToList as) => Show (NERec f (a ':| as))
+deriving instance (Eq (f a), Eq (Rec f as)) => Eq (NERec f (a ':| as))
+deriving instance (Ord (f a), Ord (Rec f as)) => Ord (NERec f (a ':| as))
 
 instance FProd NonEmpty where
     type instance Elem NonEmpty = NEIndex
@@ -625,7 +672,14 @@ instance FProd NonEmpty where
       NETail i -> \f -> \case
         x :&| xs -> (x :&|) <$> ixProd i f xs
     toRec (x :&| xs) = x :& xs
-    -- withPureProd (_ :&| xs) x = withPureProd xs x
+    withPureProd (x :&| xs) = withPureProdNE x xs
+
+withPureProdNE
+    :: f a
+    -> Rec f as
+    -> ((RecApplicative as, PureProd NonEmpty (a ':| as)) => r)
+    -> r
+withPureProdNE _ xs = withPureProdList xs
 
 instance ProdSing NonEmpty where
     prodSing (x :&| xs) = x NE.:%| prodSing xs
@@ -682,6 +736,9 @@ data ISnd :: (j, k) -> k -> Type where
     ISnd :: ISnd '(a, b) b
 
 deriving instance Show (ISnd as a)
+deriving instance Read (ISnd '(a, b) b)
+deriving instance Eq (ISnd as a)
+deriving instance Ord (ISnd as a)
 
 -- | Kind-indexed singleton for 'ISnd'.  Provided as a separate data
 -- declaration to allow you to use these at the type level.  However, the
@@ -710,6 +767,9 @@ data PTup :: (k -> Type) -> (j, k) -> Type where
     PSnd :: f a -> PTup f '(w, a)
 
 deriving instance Show (f a) => Show (PTup f '(w, a))
+deriving instance Read (f a) => Read (PTup f '(w, a))
+deriving instance Eq (f a) => Eq (PTup f '(w, a))
+deriving instance Ord (f a) => Ord (PTup f '(w, a))
 
 instance FProd ((,) j) where
     type instance Elem ((,) j) = ISnd
@@ -740,6 +800,9 @@ data IIdentity :: Identity k -> k -> Type where
     IId :: IIdentity ('Identity x) x
 
 deriving instance Show (IIdentity as a)
+deriving instance Read (IIdentity ('Identity a) a)
+deriving instance Eq (IIdentity as a)
+deriving instance Ord (IIdentity as a)
 
 -- | Kind-indexed singleton for 'IIdentity'.  Provided as a separate data
 -- declaration to allow you to use these at the type level.  However, the
@@ -770,6 +833,9 @@ data PIdentity :: (k -> Type) -> Identity k -> Type where
     PIdentity :: f a -> PIdentity f ('Identity a)
 
 deriving instance Show (f a) => Show (PIdentity f ('Identity a))
+deriving instance Read (f a) => Read (PIdentity f ('Identity a))
+deriving instance Eq (f a) => Eq (PIdentity f ('Identity a))
+deriving instance Ord (f a) => Ord (PIdentity f ('Identity a))
 
 instance FProd Identity where
     type Elem Identity = IIdentity
