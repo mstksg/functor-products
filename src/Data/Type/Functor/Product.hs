@@ -19,25 +19,44 @@
 {-# LANGUAGE TypeInType             #-}
 {-# LANGUAGE TypeOperators          #-}
 {-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE ViewPatterns           #-}
+
+-- |
+-- Module      : Data.Type.Functor.Product
+-- Copyright   : (c) Justin Le 2018
+-- License     : BSD3
+--
+-- Maintainer  : justin@jle.im
+-- Stability   : experimental
+-- Portability : non-portable
+--
+-- Generalized functor products based on lifted 'Foldable's.
+--
+-- For example, @'Rec' f '[a,b,c]@ from /vinyl/ contains an @f a@, @f b@,
+-- and @f c@.
+--
+-- @'PMaybe' f ('Just a)@ contains an @f a@ and @'PMaybe' f 'Nothing@
+-- contains nothing.
+--
+-- Also provide data types for "indexing" into each foldable.
 
 module Data.Type.Functor.Product (
   -- * Classes
     FProd(..), Shape
   , PureProd(..), pureShape
   , PureProdC(..), ReifyConstraintProd(..)
-  , ProdSing(..)
   , AllConstrainedProd
   -- ** Functions
   , indexProd, indexSing, singShape
   , mapProd, foldMapProd, hmap, zipProd
   , imapProd, itraverseProd, ifoldMapProd
-  , ifoldMapSing, foldMapSing
+  , ifoldMapSing, foldMapSing, selectProd
   , eqProd, compareProd
   -- * Instances
-  , Rec(..), Index(..)
+  , Rec(..), Index(..), withPureProdList
   , PMaybe(..), IJust(..)
   , PEither(..), IRight(..)
-  , NERec(..), NEIndex(..)
+  , NERec(..), NEIndex(..), withPureProdNE
   , PTup(..), ISnd(..)
   , PIdentity(..), IIdentity(..)
   , sameIndexVal, sameNEIndexVal
@@ -66,25 +85,41 @@ import           Lens.Micro hiding                       ((%~))
 import           Lens.Micro.Extras
 import           Unsafe.Coerce
 import qualified Data.Singletons.Prelude.List.NonEmpty   as NE
+import qualified Data.Text                               as T
 import qualified Data.Vinyl.Functor                      as V
 import qualified Data.Vinyl.TypeLevel                    as V
-import qualified Data.Vinyl.XRec                         as VX
 
 fmapIdent :: Fmap IdSym0 as :~: as
 fmapIdent = unsafeCoerce Refl
 
+-- | Simply witness the /shape/ of an argument (ie, @'Shape' [] as@
+-- witnesses the length of @as@, and @'Shape' Maybe as@ witnesses whether
+-- or not @as@ is 'Just' or 'Nothing').
 type Shape f = (Prod f Proxy :: f k -> Type)
 
+-- | Unify different functor products over a Foldable @f@.
 class (PFunctor f, SFunctor f, PFoldable f, SFoldable f) => FProd (f :: Type -> Type) where
     type Elem  f = (i :: f k -> k -> Type) | i -> f
     type Prod  f = (p :: (k -> Type) -> f k -> Type) | p -> f
 
+    -- | You can convert a singleton of a foldable value into a foldable product of
+    -- singletons.  This essentially "breaks up" the singleton into its
+    -- individual items.  Should be an inverse with 'prodSing'.
     singProd :: Sing as -> Prod f Sing as
 
+    -- | Collect a collection of singletons back into a single singleton.
+    -- Should be an inverse with 'singProd'.
+    prodSing :: Prod f Sing as -> Sing as
+
+    -- | Pair up each item in a foldable product with its index.
     withIndices
         :: Prod f g as
         -> Prod f (Elem f as :*: g) as
 
+    -- | Traverse a foldable functor product with a RankN applicative function,
+    -- mapping over each value and sequencing the effects.
+    --
+    -- This is the generalization of 'rtraverse'.
     traverseProd
         :: forall g h as m. Applicative m
         => (forall a. g a -> m (h a))
@@ -93,6 +128,7 @@ class (PFunctor f, SFunctor f, PFoldable f, SFoldable f) => FProd (f :: Type -> 
     traverseProd = case fmapIdent @as of
       Refl -> htraverse (sing @IdSym0)
 
+    -- | Zip together two foldable functor products with a Rank-N function.
     zipWithProd
         :: (forall a. g a -> h a -> j a)
         -> Prod f g as
@@ -100,6 +136,7 @@ class (PFunctor f, SFunctor f, PFoldable f, SFoldable f) => FProd (f :: Type -> 
         -> Prod f j as
     zipWithProd f xs ys = imapProd (\i x -> f x (indexProd i ys)) xs
 
+    -- | Traverse a foldable functor product with a type-changing function.
     htraverse
         :: Applicative m
         => Sing ff
@@ -107,28 +144,37 @@ class (PFunctor f, SFunctor f, PFoldable f, SFoldable f) => FProd (f :: Type -> 
         -> Prod f g as
         -> m (Prod f h (Fmap ff as))
 
+    -- | A 'Lens' into an item in a foldable functor product, given its
+    -- index.
+    --
+    -- This roughly generalizes 'rlens'.
     ixProd
         :: Elem f as a
         -> Lens' (Prod f g as) (g a)
 
+    -- | Fold a functor product into a 'Rec'.
     toRec :: Prod f g as -> Rec g (ToList as)
 
+    -- | Get a 'PureProd' instance from a foldable functor product
+    -- providing its shape.
     withPureProd
         :: Prod f g as
         -> (PureProd f as => r)
         -> r
 
+-- | Create @'Prod' f@ if you can give a @g a@ for every slot.
 class PureProd (f :: Type -> Type) (as :: f k) where
     pureProd :: (forall a. g a) -> Prod f g as
 
+-- | Create @'Prod' f@ if you can give a @g a@ for every slot, given some
+-- constraint.
 class PureProdC (f :: Type -> Type) c (as :: f k) where
     pureProdC :: (forall a. c a => g a) -> Prod f g as
 
+-- | Pair up each item in a @'Prod' f@ with a witness that @f a@ satisfies
+-- some constraint.
 class ReifyConstraintProd (f :: Type -> Type) c (g :: k -> Type) (as :: f k) where
     reifyConstraintProd :: Prod f g as -> Prod f (Dict c V.:. g) as
-
-class FProd f => ProdSing f where
-    prodSing :: Prod f Sing as -> Sing as
 
 data ElemSym0 (f :: Type -> Type) :: f k ~> k ~> Type
 data ElemSym1 (f :: Type -> Type) :: f k -> k ~> Type
@@ -144,17 +190,23 @@ type ProdSym2 (f :: Type -> Type) (g :: k -> Type) (as :: f k) = Prod f g as
 type instance Apply (ProdSym0 f) g = ProdSym1 f g
 type instance Apply (ProdSym1 f g) as = Prod f g as
 
+-- | A convenient wrapper over 'V.AllConstrained' that works for any
+-- Foldable @f@.
 type AllConstrainedProd c as = V.AllConstrained c (ToList as)
 
+-- | Create a 'Shape' given an instance of 'PureProd'.
 pureShape :: PureProd f as => Shape f as
 pureShape = pureProd Proxy
 
+-- | Convert a @'Sing' as@ into a @'Shape' f as@, witnessing the shape of
+-- of @as@ but dropping all of its values.
 singShape
     :: FProd f
     => Sing as
     -> Shape f as
 singShape = mapProd (const Proxy) . singProd
 
+-- | Map a RankN function over a 'Prod'.  The generalization of 'rmap'.
 mapProd
     :: FProd f
     => (forall a. g a -> h a)
@@ -162,6 +214,7 @@ mapProd
     -> Prod f h as
 mapProd f = runIdentity . traverseProd (Identity . f)
 
+-- | Zip together the values in two 'Prod's.
 zipProd
     :: FProd f
     => Prod f g as
@@ -169,6 +222,7 @@ zipProd
     -> Prod f (g :*: h) as
 zipProd = zipWithProd (:*:)
 
+-- | Map a type-changing function over every item in a 'Prod'.
 hmap
     :: FProd f
     => Sing ff
@@ -177,6 +231,7 @@ hmap
     -> Prod f h (Fmap ff as)
 hmap ff f = runIdentity . htraverse ff (Identity . f)
 
+-- | 'mapProd', but with access to the index at each element.
 imapProd
     :: FProd f
     => (forall a. Elem f as a -> g a -> h a)
@@ -192,6 +247,7 @@ indexSing
     -> Sing a
 indexSing i = indexProd i . singProd
 
+-- | Use an 'Elem' to index a value out of a 'Prod'.
 indexProd
     :: FProd f
     => Elem f as a
@@ -199,6 +255,7 @@ indexProd
     -> g a
 indexProd i = view (ixProd i)
 
+-- | 'traverseProd', but with access to the index at each element.
 itraverseProd
     :: (FProd f, Applicative m)
     => (forall a. Elem f as a -> g a -> m (h a))
@@ -206,6 +263,7 @@ itraverseProd
     -> m (Prod f h as)
 itraverseProd f = traverseProd (\(i :*: x) -> f i x) . withIndices
 
+-- | 'foldMapProd', but with access to the index at each element.
 ifoldMapProd
     :: (FProd f, Monoid m)
     => (forall a. Elem f as a -> g a -> m)
@@ -213,6 +271,8 @@ ifoldMapProd
     -> m
 ifoldMapProd f = getConst . itraverseProd (\i -> Const . f i)
 
+-- | Map a RankN function over a 'Prod' and collect the results as
+-- a 'Monoid'.
 foldMapProd
     :: (FProd f, Monoid m)
     => (forall a. g a -> m)
@@ -235,6 +295,20 @@ foldMapSing
     -> Sing as
     -> m
 foldMapSing f = ifoldMapSing (const f)
+
+-- | Rearrange or permute the items in a 'Prod' based on a 'Prod' of
+-- indices.
+--
+-- @
+-- 'selectProd' ('IS' 'IZ' ':&' IZ :& 'RNil') ("hi" :& "bye" :& "ok" :& RNil)
+--      == "bye" :& "hi" :& RNil
+-- @
+selectProd
+    :: FProd f
+    => Prod f (Elem f as) bs
+    -> Prod f g as
+    -> Prod f g bs
+selectProd is xs = mapProd (`indexProd` xs) is
 
 -- | An implementation of equality testing for all 'FProd' instances, as
 -- long as each of the items are instances of 'Eq'.
@@ -260,6 +334,14 @@ compareProd xs = foldMapProd getConst
                   (reifyConstraintProd @_ @Ord xs)
 
 -- | Witness an item in a type-level list by providing its index.
+--
+-- The number of 'IS's correspond to the item's position in the list.
+--
+-- @
+-- 'IZ'         :: 'Index' '[5,10,2] 5
+-- 'IS' 'IZ'      :: 'Index' '[5,10,2] 10
+-- 'IS' ('IS' 'IZ') :: 'Index' '[5,10,2] 2
+-- @
 data Index :: [k] -> k -> Type where
     IZ :: Index (a ': as) a
     IS :: Index bs a -> Index (b ': bs) a
@@ -325,6 +407,10 @@ instance FProd [] where
       SNil         -> RNil
       x `SCons` xs -> x :& singProd xs
 
+    prodSing = \case
+      RNil    -> SNil
+      x :& xs -> x `SCons` prodSing xs
+
     traverseProd
         :: forall g h m as. Applicative m
         => (forall a. g a -> m (h a))
@@ -386,6 +472,8 @@ instance FProd [] where
 
     withPureProd = withPureProdList
 
+-- | A stronger version of 'withPureProd' for 'Rec', providing
+-- a 'RecApplicative' instance as well.
 withPureProdList
     :: Rec f as
     -> ((RecApplicative as, PureProd [] as) => r)
@@ -393,11 +481,6 @@ withPureProdList
 withPureProdList = \case
     RNil    -> id
     _ :& xs -> withPureProdList xs
-
-instance ProdSing [] where
-    prodSing = \case
-      RNil    -> SNil
-      x :& xs -> x `SCons` prodSing xs
 
 instance RecApplicative as => PureProd [] as where
     pureProd = rpure
@@ -443,6 +526,12 @@ instance SingKind (IJust as a) where
 instance SDecide (IJust as a) where
     SIJust' SIJust %~ SIJust' SIJust = Proved Refl
 
+-- | A @'PMaybe' f 'Nothing@ contains nothing, and a @'PMaybe' f ('Just a)@
+-- contains an @f a@.
+--
+-- In practice this can be useful to write polymorphic
+-- functions/abstractions that contain an argument that can be "turned off"
+-- for different instances.
 data PMaybe :: (k -> Type) -> Maybe k -> Type where
     PNothing :: PMaybe f 'Nothing
     PJust    :: f a -> PMaybe f ('Just a)
@@ -463,6 +552,9 @@ instance FProd Maybe where
     singProd = \case
       SNothing -> PNothing
       SJust x  -> PJust x
+    prodSing = \case
+      PNothing -> SNothing
+      PJust x  -> SJust x
     withIndices = \case
       PNothing -> PNothing
       PJust x  -> PJust (IJust :*: x)
@@ -486,11 +578,6 @@ instance FProd Maybe where
     withPureProd = \case
       PNothing -> id
       PJust _  -> id
-
-instance ProdSing Maybe where
-    prodSing = \case
-      PNothing -> SNothing
-      PJust x  -> SJust x
 
 instance PureProd Maybe 'Nothing where
     pureProd _ = PNothing
@@ -540,58 +627,70 @@ instance SingKind (IRight as a) where
 instance SDecide (IRight as a) where
     SIRight' SIRight %~ SIRight' SIRight = Proved Refl
 
+-- | A @'PEither' f ('Left e)@ contains @'Sing' e@, and a @'PMaybe' f ('Right a)@
+-- contains an @f a@.
+--
+-- In practice this can be useful in the same situatinos that 'PMaybe' can,
+-- but with an extra value in the case where value @f@ is "turned off" with
+-- 'Left'.
 data PEither :: (k -> Type) -> Either j k -> Type where
-    PLeft  :: PEither f ('Left e)
+    PLeft  :: Sing e -> PEither f ('Left e)
     PRight :: f a -> PEither f ('Right a)
 
-instance ReifyConstraintProd (Either j) Show f as => Show (PEither f as) where
+instance (SShow j, ReifyConstraintProd (Either j) Show f as) => Show (PEither f as) where
     showsPrec d xs = case reifyConstraintProd @_ @Show xs of
-      PLeft                       -> showString "PLeft"
-      PRight (V.Compose (Dict x)) -> showsUnaryWith showsPrec "PRight" d x
+        PLeft e                     -> showsUnaryWith go         "PLeft" d e
+        PRight (V.Compose (Dict x)) -> showsUnaryWith showsPrec "PRight" d x
+      where
+        go (fromIntegral->FromSing i) x (T.pack->FromSing str) = T.unpack . fromSing $ sShowsPrec i x str
+        go _ _ _ = undefined
 
 instance FProd (Either j) where
     type instance Elem (Either j) = IRight
     type instance Prod (Either j) = PEither
 
     singProd = \case
-      SLeft  _ -> PLeft
+      SLeft  e -> PLeft e
       SRight x -> PRight x
+    prodSing = \case
+      PLeft e  -> SLeft e
+      PRight x -> SRight x
     withIndices = \case
-      PLeft    -> PLeft
+      PLeft e  -> PLeft e
       PRight x -> PRight (IRight :*: x)
     traverseProd f = \case
-      PLeft    -> pure PLeft
+      PLeft e  -> pure (PLeft e)
       PRight x -> PRight <$> f x
     zipWithProd f = \case
-      PLeft -> \case
-        PLeft -> PLeft
+      PLeft e -> \case
+        PLeft _ -> PLeft e
       PRight x -> \case
         PRight y -> PRight (f x y)
     htraverse _ f = \case
-      PLeft    -> pure PLeft
+      PLeft e  -> pure (PLeft e)
       PRight x -> PRight <$> f x
     ixProd = \case
       IRight -> \f -> \case
         PRight x -> PRight <$> f x
     toRec = \case
-      PLeft    -> RNil
+      PLeft _  -> RNil
       PRight x -> x :& RNil
     withPureProd = \case
-      PLeft    -> id
-      PRight _ -> id
+      PLeft Sing -> id
+      PRight _   -> id
 
-instance PureProd (Either j) ('Left e) where
-    pureProd _ = PLeft
+instance SingI e => PureProd (Either j) ('Left e) where
+    pureProd _ = PLeft sing
 instance PureProd (Either j) ('Right a) where
     pureProd x = PRight x
 
-instance PureProdC (Either j) c ('Left e) where
-    pureProdC _ = PLeft
+instance SingI e => PureProdC (Either j) c ('Left e) where
+    pureProdC _ = (PLeft sing)
 instance c a => PureProdC (Either j) c ('Right a) where
     pureProdC x = PRight x
 
 instance ReifyConstraintProd (Either j) c g ('Left e) where
-    reifyConstraintProd PLeft = PLeft
+    reifyConstraintProd (PLeft e) = PLeft e
 instance c (g a) => ReifyConstraintProd (Either j) c g ('Right a) where
     reifyConstraintProd (PRight x) = PRight (V.Compose (Dict x))
 
@@ -646,6 +745,7 @@ instance SDecide (NEIndex as a) where
           Proved Refl -> Proved Refl
           Disproved v -> Disproved $ \case Refl -> v Refl
 
+-- | A non-empty version of 'Rec'.
 data NERec :: (k -> Type) -> NonEmpty k -> Type where
     (:&|) :: f a -> Rec f as -> NERec f (a ':| as)
 infixr 5 :&|
@@ -659,6 +759,7 @@ instance FProd NonEmpty where
     type instance Prod NonEmpty = NERec
 
     singProd (x NE.:%| xs) = x :&| singProd xs
+    prodSing (x :&| xs) = x NE.:%| prodSing xs
     withIndices (x :&| xs) =
           (NEHead :*: x)
       :&| mapProd (\(i :*: y) -> NETail i :*: y) (withIndices xs)
@@ -675,15 +776,14 @@ instance FProd NonEmpty where
     toRec (x :&| xs) = x :& xs
     withPureProd (x :&| xs) = withPureProdNE x xs
 
+-- | A stronger version of 'withPureProd' for 'NERec', providing
+-- a 'RecApplicative' instance as well.
 withPureProdNE
     :: f a
     -> Rec f as
     -> ((RecApplicative as, PureProd NonEmpty (a ':| as)) => r)
     -> r
 withPureProdNE _ xs = withPureProdList xs
-
-instance ProdSing NonEmpty where
-    prodSing (x :&| xs) = x NE.:%| prodSing xs
 
 instance RecApplicative as => PureProd NonEmpty (a ':| as) where
     pureProd x = x :&| pureProd x
@@ -764,35 +864,41 @@ instance SingKind (ISnd as a) where
 instance SDecide (ISnd as a) where
     SISnd' SISnd %~ SISnd' SISnd = Proved Refl
 
+-- | A 'PTup' tuples up some singleton with some value; a @'PTup' f '(w,
+-- a)@ contains a @'Sing' w@ and an @f a@.
+--
+-- This can be useful for carrying along some witness aside a functor
+-- value.
 data PTup :: (k -> Type) -> (j, k) -> Type where
-    PSnd :: f a -> PTup f '(w, a)
+    PTup :: Sing w -> f a -> PTup f '(w, a)
 
-deriving instance Show (f a) => Show (PTup f '(w, a))
-deriving instance Read (f a) => Read (PTup f '(w, a))
-deriving instance Eq (f a) => Eq (PTup f '(w, a))
-deriving instance Ord (f a) => Ord (PTup f '(w, a))
+deriving instance (Show (Sing w), Show (f a)) => Show (PTup f '(w, a))
+deriving instance (Read (Sing w), Read (f a)) => Read (PTup f '(w, a))
+deriving instance (Eq (Sing w), Eq (f a)) => Eq (PTup f '(w, a))
+deriving instance (Ord (Sing w), Ord (f a)) => Ord (PTup f '(w, a))
 
 instance FProd ((,) j) where
     type instance Elem ((,) j) = ISnd
     type instance Prod ((,) j) = PTup
 
-    singProd (STuple2 _ x) = PSnd x
-    withIndices (PSnd x) = PSnd (ISnd :*: x)
-    traverseProd f (PSnd x) = PSnd <$> f x
-    zipWithProd f (PSnd x) (PSnd y) = PSnd (f x y)
-    htraverse _ f (PSnd x) = PSnd <$> f x
-    ixProd ISnd f (PSnd x) = PSnd <$> f x
-    toRec (PSnd x) = x :& RNil
-    withPureProd (PSnd _) x = x
+    singProd (STuple2 w x) = PTup w x
+    prodSing (PTup w x) = STuple2 w x
+    withIndices (PTup w x) = PTup w (ISnd :*: x)
+    traverseProd f (PTup w x) = PTup w <$> f x
+    zipWithProd f (PTup w x) (PTup _ y) = PTup w (f x y)
+    htraverse _ f (PTup w x) = PTup w <$> f x
+    ixProd ISnd f (PTup w x) = PTup w <$> f x
+    toRec (PTup _ x) = x :& RNil
+    withPureProd (PTup Sing _) x = x
 
-instance PureProd ((,) j) '(w, a) where
-    pureProd x = PSnd x
+instance SingI w => PureProd ((,) j) '(w, a) where
+    pureProd x = PTup sing x
 
-instance c a => PureProdC ((,) j) c '(w, a) where
-    pureProdC x = PSnd x
+instance (SingI w, c a) => PureProdC ((,) j) c '(w, a) where
+    pureProdC x = PTup sing x
 
 instance c (g a) => ReifyConstraintProd ((,) j) c g '(w, a) where
-    reifyConstraintProd (PSnd x) = PSnd $ V.Compose (Dict x)
+    reifyConstraintProd (PTup w x) = PTup w $ V.Compose (Dict x)
 
 -- | Trivially witness the item held in an 'Identity'.
 --
@@ -830,6 +936,9 @@ instance SingKind (IIdentity as a) where
 instance SDecide (IIdentity as a) where
     SIIdentity' SIId %~ SIIdentity' SIId = Proved Refl
 
+-- | A 'PIdentity' is a trivial functor product; it is simply the functor,
+-- itself, alone.  @'PIdentity' f ('Identity' a)@ is simply @f a@.  This
+-- may be useful in conjunction with other combinators.
 data PIdentity :: (k -> Type) -> Identity k -> Type where
     PIdentity :: f a -> PIdentity f ('Identity a)
 
@@ -843,6 +952,7 @@ instance FProd Identity where
     type Prod Identity = PIdentity
 
     singProd (SIdentity x) = PIdentity x
+    prodSing (PIdentity x) = SIdentity x
     withIndices (PIdentity x) = PIdentity (IId :*: x)
     traverseProd f (PIdentity x) = PIdentity <$> f x
     zipWithProd f (PIdentity x) (PIdentity y) = PIdentity (f x y)
@@ -850,9 +960,6 @@ instance FProd Identity where
     ixProd IId f (PIdentity x) = PIdentity <$> f x
     toRec (PIdentity x) = x :& RNil
     withPureProd (PIdentity _) x = x
-
-instance ProdSing Identity where
-    prodSing (PIdentity x) = SIdentity x
 
 instance PureProd Identity ('Identity a) where
     pureProd x = PIdentity x
