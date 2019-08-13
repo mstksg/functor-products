@@ -2,8 +2,11 @@
 -- See Hoogle, http://www.haskell.org/hoogle/
 
 
--- | Please see the README on GitHub at
---   <a>https://github.com/mstksg/functor-products#readme</a>
+-- | General functor products for various Foldable instances
+--   
+--   Generalizes the Rec type in vinyl to work over various different
+--   Foldable instances, instead of just lists. Provides a unifying
+--   abstraction for all of them, as well as data types to index into them.
 @package functor-products
 @version 0.1.0.0
 
@@ -93,13 +96,6 @@ type AllConstrainedProd c as = AllConstrained c (ToList as)
 -- | Use an <a>Elem</a> to index a value out of a <a>Prod</a>.
 indexProd :: FProd f => Elem f as a -> Prod f g as -> g a
 
--- | Extract the item from the container witnessed by the <a>Elem</a>
-indexSing :: forall f as a. FProd f => Elem f as a -> Sing as -> Sing a
-
--- | Convert a <tt><a>Sing</a> as</tt> into a <tt><a>Shape</a> f as</tt>,
---   witnessing the shape of of <tt>as</tt> but dropping all of its values.
-singShape :: FProd f => Sing as -> Shape f as
-
 -- | Map a RankN function over a <a>Prod</a>. The generalization of
 --   <a>rmap</a>.
 mapProd :: FProd f => (forall a. g a -> h a) -> Prod f g as -> Prod f h as
@@ -123,12 +119,6 @@ itraverseProd :: (FProd f, Applicative m) => (forall a. Elem f as a -> g a -> m 
 -- | <a>foldMapProd</a>, but with access to the index at each element.
 ifoldMapProd :: (FProd f, Monoid m) => (forall a. Elem f as a -> g a -> m) -> Prod f g as -> m
 
--- | <tt>foldMapUni</tt> but with access to the index.
-ifoldMapSing :: forall f k (as :: f k) m. (FProd f, Monoid m) => (forall a. Elem f as a -> Sing a -> m) -> Sing as -> m
-
--- | A <a>foldMap</a> over all items in a collection.
-foldMapSing :: forall f k (as :: f k) m. (FProd f, Monoid m) => (forall (a :: k). Sing a -> m) -> Sing as -> m
-
 -- | Rearrange or permute the items in a <a>Prod</a> based on a <a>Prod</a>
 --   of indices.
 --   
@@ -138,6 +128,9 @@ foldMapSing :: forall f k (as :: f k) m. (FProd f, Monoid m) => (forall (a :: k)
 --   </pre>
 selectProd :: FProd f => Prod f (Elem f as) bs -> Prod f g as -> Prod f g bs
 
+-- | Generate a <a>Prod</a> of indices for an <tt>as</tt>.
+pureIndices :: (FProd f, PureProd f as) => Prod f (Elem f as) as
+
 -- | An implementation of equality testing for all <a>FProd</a> instances,
 --   as long as each of the items are instances of <a>Eq</a>.
 eqProd :: (FProd f, ReifyConstraintProd f Eq g as) => Prod f g as -> Prod f g as -> Bool
@@ -145,6 +138,19 @@ eqProd :: (FProd f, ReifyConstraintProd f Eq g as) => Prod f g as -> Prod f g as
 -- | An implementation of order comparison for all <a>FProd</a> instances,
 --   as long as each of the items are instances of <a>Ord</a>.
 compareProd :: (FProd f, ReifyConstraintProd f Ord g as) => Prod f g as -> Prod f g as -> Ordering
+
+-- | Extract the item from the container witnessed by the <a>Elem</a>
+indexSing :: forall f as a. FProd f => Elem f as a -> Sing as -> Sing a
+
+-- | Convert a <tt><a>Sing</a> as</tt> into a <tt><a>Shape</a> f as</tt>,
+--   witnessing the shape of of <tt>as</tt> but dropping all of its values.
+singShape :: FProd f => Sing as -> Shape f as
+
+-- | A <a>foldMap</a> over all items in a collection.
+foldMapSing :: forall f k (as :: f k) m. (FProd f, Monoid m) => (forall (a :: k). Sing a -> m) -> Sing as -> m
+
+-- | <a>foldMapSing</a> but with access to the index.
+ifoldMapSing :: forall f k (as :: f k) m. (FProd f, Monoid m) => (forall a. Elem f as a -> Sing a -> m) -> Sing as -> m
 
 -- | A record is parameterized by a universe <tt>u</tt>, an interpretation
 --   <tt>f</tt> and a list of rows <tt>rs</tt>. The labels or indices of
@@ -258,6 +264,9 @@ sameIndexVal :: Index as a -> Index as b -> Maybe (a :~: b)
 --   a list. Therefore, even if two indices are different, we cannot prove
 --   that the values they point to are different.
 sameNEIndexVal :: NEIndex as a -> NEIndex as b -> Maybe (a :~: b)
+
+-- | Produce an <a>Index</a> from a <a>RecElem</a> constraint.
+recElemIndex :: forall r rs i. (RecElem Rec r r rs rs i, PureProd [] rs) => Index rs r
 
 -- | Kind-indexed singleton for <a>Index</a>. Provided as a separate data
 --   declaration to allow you to use these at the type level. However, the
