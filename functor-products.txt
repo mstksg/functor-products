@@ -119,6 +119,14 @@ itraverseProd :: (FProd f, Applicative m) => (forall a. Elem f as a -> g a -> m 
 -- | <a>foldMapProd</a>, but with access to the index at each element.
 ifoldMapProd :: (FProd f, Monoid m) => (forall a. Elem f as a -> g a -> m) -> Prod f g as -> m
 
+-- | Construct a <a>Prod</a> purely by providing a generating function for
+--   each index.
+generateProd :: (FProd f, PureProd f as) => (forall a. Elem f as a -> g a) -> Prod f g as
+
+-- | Construct a <a>Prod</a> in an <a>Applicative</a> context by providing
+--   a generating function for each index.
+generateProdA :: (FProd f, PureProd f as, Applicative m) => (forall a. Elem f as a -> m (g a)) -> m (Prod f g as)
+
 -- | Rearrange or permute the items in a <a>Prod</a> based on a <a>Prod</a>
 --   of indices.
 --   
@@ -129,7 +137,7 @@ ifoldMapProd :: (FProd f, Monoid m) => (forall a. Elem f as a -> g a -> m) -> Pr
 selectProd :: FProd f => Prod f (Elem f as) bs -> Prod f g as -> Prod f g bs
 
 -- | Generate a <a>Prod</a> of indices for an <tt>as</tt>.
-pureIndices :: (FProd f, PureProd f as) => Prod f (Elem f as) as
+indices :: (FProd f, PureProd f as) => Prod f (Elem f as) as
 
 -- | An implementation of equality testing for all <a>FProd</a> instances,
 --   as long as each of the items are instances of <a>Eq</a>.
@@ -265,8 +273,18 @@ sameIndexVal :: Index as a -> Index as b -> Maybe (a :~: b)
 --   that the values they point to are different.
 sameNEIndexVal :: NEIndex as a -> NEIndex as b -> Maybe (a :~: b)
 
--- | Produce an <a>Index</a> from a <a>RecElem</a> constraint.
-recElemIndex :: forall r rs i. (RecElem Rec r r rs rs i, PureProd [] rs) => Index rs r
+-- | Produce an <a>Index</a> from an <a>RElem</a> constraint.
+rElemIndex :: forall r rs i. (RElem r rs i, PureProd [] rs) => Index rs r
+
+-- | If we have <tt><a>Index</a> as a</tt>, we should also be able to
+--   create an item that would require <tt><a>RElem</a> a as (<a>RIndex</a>
+--   as a)</tt>. Along with <a>rElemIndex</a>, this essentially converts
+--   between the indexing system in this library and the indexing system of
+--   <i>vinyl</i>.
+indexRElem :: (SDecide k, SingI (a :: k), RecApplicative as, FoldRec as as) => Index as a -> (RElem a as (RIndex a as) => r) -> r
+
+-- | Use an <a>Index</a> to inject an <tt>f a</tt> into a <a>CoRec</a>.
+toCoRec :: forall as a f. (RecApplicative as, FoldRec as as) => Index as a -> f a -> CoRec f as
 
 -- | Kind-indexed singleton for <a>Index</a>. Provided as a separate data
 --   declaration to allow you to use these at the type level. However, the
