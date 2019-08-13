@@ -49,7 +49,8 @@ module Data.Type.Functor.Product (
   -- ** Functions
   , indexProd, mapProd, foldMapProd, hmap, zipProd
   , imapProd, itraverseProd, ifoldMapProd
-  , selectProd, pureIndices
+  , generateProd, generateProdA
+  , selectProd, indices
   , eqProd, compareProd
   -- *** Over singletons
   , indexSing, singShape
@@ -62,7 +63,8 @@ module Data.Type.Functor.Product (
   , PTup(..), ISnd(..)
   , PIdentity(..), IIdentity(..)
   , sameIndexVal, sameNEIndexVal
-  , recElemIndex
+  -- ** Interfacing with vinyl
+  , rElemIndex, indexRElem, toCoRec
   -- * Singletons
   , SIndex(..), SIJust(..), SIRight(..), SNEIndex(..), SISnd(..), SIIdentity(..)
   , Sing (SIndex', SIJust', SIRight', SNEIndex', SISnd', SIIdentity')
@@ -76,6 +78,7 @@ import           Data.Functor.Classes
 import           Data.Functor.Identity
 import           Data.Kind
 import           Data.List.NonEmpty                      (NonEmpty(..))
+import           Data.Maybe
 import           Data.Semigroup
 import           Data.Singletons
 import           Data.Singletons.Decide
@@ -83,6 +86,7 @@ import           Data.Singletons.Prelude hiding          (Elem, ElemSym0, ElemSy
 import           Data.Singletons.Prelude.Foldable hiding (Elem, ElemSym0, ElemSym1, ElemSym2)
 import           Data.Singletons.Prelude.Identity
 import           Data.Vinyl hiding                       ((:~:))
+import           Data.Vinyl.CoRec
 import           GHC.Generics                            ((:*:)(..))
 import           Lens.Micro hiding                       ((%~))
 import           Lens.Micro.Extras
@@ -202,8 +206,8 @@ pureShape :: PureProd f as => Shape f as
 pureShape = pureProd Proxy
 
 -- | Generate a 'Prod' of indices for an @as@.
-pureIndices :: (FProd f, PureProd f as) => Prod f (Elem f as) as
-pureIndices = imapProd const pureShape
+indices :: (FProd f, PureProd f as) => Prod f (Elem f as) as
+indices = imapProd const pureShape
 
 -- | Convert a @'Sing' as@ into a @'Shape' f as@, witnessing the shape of
 -- of @as@ but dropping all of its values.
@@ -339,6 +343,23 @@ compareProd
 compareProd xs = foldMapProd getConst
             . zipWithProd (\(V.Compose (Dict x)) y -> Const (compare x y))
                   (reifyConstraintProd @_ @Ord xs)
+
+-- | Construct a 'Prod' purely by providing a generating function for each
+-- index.
+generateProd
+    :: (FProd f, PureProd f as)
+    => (forall a. Elem f as a -> g a)
+    -> Prod f g as
+generateProd f = mapProd f indices
+
+-- | Construct a 'Prod' in an 'Applicative' context by providing
+-- a generating function for each index.
+generateProdA
+    :: (FProd f, PureProd f as, Applicative m)
+    => (forall a. Elem f as a -> m (g a))
+    -> m (Prod f g as)
+generateProdA f = traverseProd f indices
+
 
 -- | Witness an item in a type-level list by providing its index.
 --
@@ -977,27 +998,39 @@ instance c a => PureProdC Identity c ('Identity a) where
 instance c (g a) => ReifyConstraintProd Identity c g ('Identity a) where
     reifyConstraintProd (PIdentity x) = PIdentity $ V.Compose (Dict x)
 
--- | Produce an 'Index' from a 'RecElem' constraint.
-recElemIndex
-    :: forall r rs i. (RecElem Rec r r rs rs i, PureProd [] rs)
+-- | Produce an 'Index' from an 'RElem' constraint.
+rElemIndex
+    :: forall r rs i. (RElem r rs i, PureProd [] rs)
     => Index rs r
-recElemIndex = rgetC pureIndices
+rElemIndex = rgetC indices
 
--- -- TODO
--- indexRecElem
---     :: forall k (rs :: [k]) r a. (SDecide k, SingI rs)
---     => Index rs r
---     -> (forall i. RecElem Rec r r rs rs i => a)
---     -> a
--- indexRecElem i0 = go i0 xs
---   where
---     r  = indexSing i0 xs
---     xs = sing
---     go :: Index ts r -> Sing ts -> (forall i. RecElem Rec r r ts ts i => b) -> b
---     go = \case
---       IZ -> \_ -> id
---       IS i -> \case
---         y `SCons` ys -> case y %~ r of
---           Proved Refl -> go i ys
---           Disproved v -> ????
+-- | Use an 'Index' to inject an @f a@ into a 'CoRec'.
+toCoRec
+    :: forall as a f. (RecApplicative as, FoldRec as as)
+    => Index as a
+    -> f a
+    -> CoRec f as
+toCoRec = \case
+    IZ   -> CoRec
+    IS i -> \x -> fromJust . firstField $ mapProd (go i x) indices
+  where
+    go :: Index bs a -> f a -> Index (b ': bs) c -> V.Compose Maybe f c
+    go i x j = case sameIndexVal (IS i) j of
+      Just Refl -> V.Compose (Just x)
+      Nothing  ->  V.Compose  Nothing
 
+-- | If we have @'Index' as a@, we should also be able to create an item
+-- that would require @'RElem' a as ('V.RIndex' as a)@.  Along with
+-- 'rElemIndex', this essentially converts between the indexing system in
+-- this library and the indexing system of /vinyl/.
+indexRElem
+    :: (SDecide k, SingI (a :: k), RecApplicative as, FoldRec as as)
+    => Index as a
+    -> (RElem a as (V.RIndex a as) => r)
+    -> r
+indexRElem i = case toCoRec i x of
+    CoRec y -> case x %~ y of
+      Proved Refl -> id
+      Disproved _ -> errorWithoutStackTrace "why :|"
+  where
+    x = sing
