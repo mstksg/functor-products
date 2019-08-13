@@ -47,11 +47,13 @@ module Data.Type.Functor.Product (
   , PureProdC(..), ReifyConstraintProd(..)
   , AllConstrainedProd
   -- ** Functions
-  , indexProd, indexSing, singShape
-  , mapProd, foldMapProd, hmap, zipProd
+  , indexProd, mapProd, foldMapProd, hmap, zipProd
   , imapProd, itraverseProd, ifoldMapProd
-  , ifoldMapSing, foldMapSing, selectProd
+  , selectProd, pureIndices
   , eqProd, compareProd
+  -- *** Over singletons
+  , indexSing, singShape
+  , foldMapSing, ifoldMapSing
   -- * Instances
   , Rec(..), Index(..), withPureProdList
   , PMaybe(..), IJust(..)
@@ -60,6 +62,7 @@ module Data.Type.Functor.Product (
   , PTup(..), ISnd(..)
   , PIdentity(..), IIdentity(..)
   , sameIndexVal, sameNEIndexVal
+  , recElemIndex
   -- * Singletons
   , SIndex(..), SIJust(..), SIRight(..), SNEIndex(..), SISnd(..), SIIdentity(..)
   , Sing (SIndex', SIJust', SIRight', SNEIndex', SISnd', SIIdentity')
@@ -198,6 +201,10 @@ type AllConstrainedProd c as = V.AllConstrained c (ToList as)
 pureShape :: PureProd f as => Shape f as
 pureShape = pureProd Proxy
 
+-- | Generate a 'Prod' of indices for an @as@.
+pureIndices :: (FProd f, PureProd f as) => Prod f (Elem f as) as
+pureIndices = imapProd const pureShape
+
 -- | Convert a @'Sing' as@ into a @'Shape' f as@, witnessing the shape of
 -- of @as@ but dropping all of its values.
 singShape
@@ -280,7 +287,7 @@ foldMapProd
     -> m
 foldMapProd f = ifoldMapProd (const f)
 
--- | 'foldMapUni' but with access to the index.
+-- | 'foldMapSing' but with access to the index.
 ifoldMapSing
     :: forall f k (as :: f k) m. (FProd f, Monoid m)
     => (forall a. Elem f as a -> Sing a -> m)
@@ -969,3 +976,28 @@ instance c a => PureProdC Identity c ('Identity a) where
 
 instance c (g a) => ReifyConstraintProd Identity c g ('Identity a) where
     reifyConstraintProd (PIdentity x) = PIdentity $ V.Compose (Dict x)
+
+-- | Produce an 'Index' from a 'RecElem' constraint.
+recElemIndex
+    :: forall r rs i. (RecElem Rec r r rs rs i, PureProd [] rs)
+    => Index rs r
+recElemIndex = rgetC pureIndices
+
+-- -- TODO
+-- indexRecElem
+--     :: forall k (rs :: [k]) r a. (SDecide k, SingI rs)
+--     => Index rs r
+--     -> (forall i. RecElem Rec r r rs rs i => a)
+--     -> a
+-- indexRecElem i0 = go i0 xs
+--   where
+--     r  = indexSing i0 xs
+--     xs = sing
+--     go :: Index ts r -> Sing ts -> (forall i. RecElem Rec r r ts ts i => b) -> b
+--     go = \case
+--       IZ -> \_ -> id
+--       IS i -> \case
+--         y `SCons` ys -> case y %~ r of
+--           Proved Refl -> go i ys
+--           Disproved v -> ????
+
