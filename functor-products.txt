@@ -73,7 +73,7 @@ type Shape f = (Prod f Proxy :: f k -> Type)
 
 -- | Create <tt><a>Prod</a> f</tt> if you can give a <tt>g a</tt> for every
 --   slot.
-class PureProd (f :: Type -> Type) (as :: f k)
+class PureProd f as
 pureProd :: PureProd f as => (forall a. g a) -> Prod f g as
 
 -- | Create a <a>Shape</a> given an instance of <a>PureProd</a>.
@@ -81,12 +81,12 @@ pureShape :: PureProd f as => Shape f as
 
 -- | Create <tt><a>Prod</a> f</tt> if you can give a <tt>g a</tt> for every
 --   slot, given some constraint.
-class PureProdC (f :: Type -> Type) c (as :: f k)
+class PureProdC f c as
 pureProdC :: PureProdC f c as => (forall a. c a => g a) -> Prod f g as
 
 -- | Pair up each item in a <tt><a>Prod</a> f</tt> with a witness that
 --   <tt>f a</tt> satisfies some constraint.
-class ReifyConstraintProd (f :: Type -> Type) c (g :: k -> Type) (as :: f k)
+class ReifyConstraintProd f c g as
 reifyConstraintProd :: ReifyConstraintProd f c g as => Prod f g as -> Prod f (Dict c :. g) as
 
 -- | A convenient wrapper over <a>AllConstrained</a> that works for any
@@ -165,9 +165,9 @@ ifoldMapSing :: forall f k (as :: f k) m. (FProd f, Monoid m) => (forall a. Elem
 --   the record are given by inhabitants of the kind <tt>u</tt>; the type
 --   of values at any label <tt>r :: u</tt> is given by its interpretation
 --   <tt>f r :: *</tt>.
-data Rec (a :: u -> Type) (b :: [u]) :: forall u. () => u -> Type -> [u] -> Type
-[RNil] :: forall u (a :: u -> Type) (b :: [u]). () => Rec a ([] :: [u])
-[:&] :: forall u (a :: u -> Type) (b :: [u]) (r :: u) (rs :: [u]). () => !a r -> !Rec a rs -> Rec a (r : rs)
+data Rec (a :: u -> Type) (b :: [u])
+[RNil] :: forall u (a :: u -> Type). Rec a ('[] :: [u])
+[:&] :: forall u (a :: u -> Type) (r :: u) (rs :: [u]). !a r -> !Rec a rs -> Rec a (r : rs)
 infixr 7 :&
 
 -- | Witness an item in a type-level list by providing its index.
@@ -195,13 +195,13 @@ withPureProdList :: Rec f as -> ((RecApplicative as, PureProd [] as) => r) -> r
 --   functions/abstractions that contain an argument that can be "turned
 --   off" for different instances.
 data PMaybe :: (k -> Type) -> Maybe k -> Type
-[PNothing] :: PMaybe f  'Nothing
-[PJust] :: f a -> PMaybe f ( 'Just a)
+[PNothing] :: PMaybe f 'Nothing
+[PJust] :: f a -> PMaybe f ('Just a)
 
 -- | Witness an item in a type-level <a>Maybe</a> by proving the
 --   <a>Maybe</a> is <a>Just</a>.
 data IJust :: Maybe k -> k -> Type
-[IJust] :: IJust ( 'Just a) a
+[IJust] :: IJust ('Just a) a
 
 -- | A <tt><a>PEither</a> f ('Left e)</tt> contains <tt><a>Sing</a> e</tt>,
 --   and a <tt><a>PMaybe</a> f ('Right a)</tt> contains an <tt>f a</tt>.
@@ -210,13 +210,13 @@ data IJust :: Maybe k -> k -> Type
 --   <a>PMaybe</a> can, but with an extra value in the case where value
 --   <tt>f</tt> is "turned off" with <a>Left</a>.
 data PEither :: (k -> Type) -> Either j k -> Type
-[PLeft] :: Sing e -> PEither f ( 'Left e)
-[PRight] :: f a -> PEither f ( 'Right a)
+[PLeft] :: Sing e -> PEither f ('Left e)
+[PRight] :: f a -> PEither f ('Right a)
 
 -- | Witness an item in a type-level <tt><a>Either</a> j</tt> by proving
 --   the <a>Either</a> is <a>Right</a>.
 data IRight :: Either j k -> k -> Type
-[IRight] :: IRight ( 'Right a) a
+[IRight] :: IRight ('Right a) a
 
 -- | A non-empty version of <a>Rec</a>.
 data NERec :: (k -> Type) -> NonEmpty k -> Type
@@ -251,11 +251,11 @@ data ISnd :: (j, k) -> k -> Type
 --   a)</tt> is simply <tt>f a</tt>. This may be useful in conjunction with
 --   other combinators.
 data PIdentity :: (k -> Type) -> Identity k -> Type
-[PIdentity] :: f a -> PIdentity f ( 'Identity a)
+[PIdentity] :: f a -> PIdentity f ('Identity a)
 
 -- | Trivially witness the item held in an <a>Identity</a>.
 data IIdentity :: Identity k -> k -> Type
-[IId] :: IIdentity ( 'Identity x) x
+[IId] :: IIdentity ('Identity x) x
 
 -- | Test if two indices point to the same item in a list.
 --   
@@ -286,55 +286,34 @@ indexRElem :: (SDecide k, SingI (a :: k), RecApplicative as, FoldRec as as) => I
 -- | Use an <a>Index</a> to inject an <tt>f a</tt> into a <a>CoRec</a>.
 toCoRec :: forall as a f. (RecApplicative as, FoldRec as as) => Index as a -> f a -> CoRec f as
 
--- | Kind-indexed singleton for <a>Index</a>. Provided as a separate data
---   declaration to allow you to use these at the type level. However, the
---   main interface is still provided through the newtype wrapper
---   <a>SIndex'</a>, which has an actual proper <a>Sing</a> instance.
+-- | Kind-indexed singleton for <a>Index</a>.
 data SIndex as a :: Index as a -> Type
-[SIZ] :: SIndex (a : as) a  'IZ
-[SIS] :: SIndex bs a i -> SIndex (b : bs) a ( 'IS i)
+[SIZ] :: SIndex (a : as) a 'IZ
+[SIS] :: SIndex bs a i -> SIndex (b : bs) a ('IS i)
 
--- | Kind-indexed singleton for <a>IJust</a>. Provided as a separate data
---   declaration to allow you to use these at the type level. However, the
---   main interface is still provided through the newtype wrapper
---   <a>SIJust'</a>, which has an actual proper <a>Sing</a> instance.
---   
---   This distinction will be unnecessary once <a>Sing</a> is a type
---   family.
+-- | Kind-indexed singleton for <a>IJust</a>.
 data SIJust as a :: IJust as a -> Type
-[SIJust] :: SIJust ( 'Just a) a  'IJust
+[SIJust] :: SIJust ('Just a) a 'IJust
 
--- | Kind-indexed singleton for <a>IRight</a>. Provided as a separate data
---   declaration to allow you to use these at the type level. However, the
---   main interface is still provided through the newtype wrapper
---   <a>SIRight'</a>, which has an actual proper <a>Sing</a> instance.
+-- | Kind-indexed singleton for <a>IRight</a>.
 data SIRight as a :: IRight as a -> Type
-[SIRight] :: SIRight ( 'Right a) a  'IRight
+[SIRight] :: SIRight ('Right a) a 'IRight
 
--- | Kind-indexed singleton for <a>NEIndex</a>. Provided as a separate data
---   declaration to allow you to use these at the type level. However, the
---   main interface is still provided through the newtype wrapper
---   <a>SNEIndex'</a>, which has an actual proper <a>Sing</a> instance.
+-- | Kind-indexed singleton for <a>NEIndex</a>.
 data SNEIndex as a :: NEIndex as a -> Type
-[SNEHead] :: SNEIndex (a :| as) a  'NEHead
-[SNETail] :: SIndex as a i -> SNEIndex (b :| as) a ( 'NETail i)
+[SNEHead] :: SNEIndex (a :| as) a 'NEHead
+[SNETail] :: SIndex as a i -> SNEIndex (b :| as) a ('NETail i)
 
--- | Kind-indexed singleton for <a>ISnd</a>. Provided as a separate data
---   declaration to allow you to use these at the type level. However, the
---   main interface is still provided through the newtype wrapper
---   <a>SISnd'</a>, which has an actual proper <a>Sing</a> instance.
+-- | Kind-indexed singleton for <a>ISnd</a>.
 data SISnd as a :: ISnd as a -> Type
-[SISnd] :: SISnd '(a, b) b  'ISnd
+[SISnd] :: SISnd '(a, b) b 'ISnd
 
 -- | Kind-indexed singleton for <a>IIdentity</a>. Provided as a separate
 --   data declaration to allow you to use these at the type level. However,
 --   the main interface is still provided through the newtype wrapper
---   <a>SIIdentity'</a>, which has an actual proper <a>Sing</a> instance.
+--   <tt>SIIdentity'</tt>, which has an actual proper <a>Sing</a> instance.
 data SIIdentity as a :: IIdentity as a -> Type
-[SIId] :: SIIdentity ( 'Identity a) a  'IId
-
--- | The singleton kind-indexed data family.
-data family Sing (a :: k) :: Type
+[SIId] :: SIIdentity ('Identity a) a 'IId
 data ElemSym0 (f :: Type -> Type) :: f k ~> k ~> Type
 data ElemSym1 (f :: Type -> Type) :: f k -> k ~> Type
 type ElemSym2 (f :: Type -> Type) (as :: f k) (a :: k) = Elem f as a
@@ -351,7 +330,7 @@ instance forall k (as :: GHC.Maybe.Maybe k) (a :: k). GHC.Classes.Eq (Data.Type.
 instance forall k (as :: GHC.Maybe.Maybe k) (a :: k). GHC.Classes.Ord (Data.Type.Functor.Product.IJust as a)
 instance forall k (as :: GHC.Maybe.Maybe k) (a :: k) (i :: Data.Type.Functor.Product.IJust as a). GHC.Show.Show (Data.Type.Functor.Product.SIJust as a i)
 instance forall j k (as :: Data.Either.Either j k) (a :: k). GHC.Show.Show (Data.Type.Functor.Product.IRight as a)
-instance forall j k (a :: k). GHC.Read.Read (Data.Type.Functor.Product.IRight ('Data.Either.Right a) a)
+instance forall k j (a :: k). GHC.Read.Read (Data.Type.Functor.Product.IRight ('Data.Either.Right a) a)
 instance forall j k (as :: Data.Either.Either j k) (a :: k). GHC.Classes.Eq (Data.Type.Functor.Product.IRight as a)
 instance forall j k (as :: Data.Either.Either j k) (a :: k). GHC.Classes.Ord (Data.Type.Functor.Product.IRight as a)
 instance forall j k (as :: Data.Either.Either j k) (a :: k) (i :: Data.Type.Functor.Product.IRight as a). GHC.Show.Show (Data.Type.Functor.Product.SIRight as a i)
@@ -363,14 +342,14 @@ instance forall a1 (f :: a1 -> *) (a2 :: a1) (as :: [a1]). (GHC.Show.Show (f a2)
 instance forall a1 (f :: a1 -> *) (a2 :: a1) (as :: [a1]). (GHC.Classes.Eq (f a2), GHC.Classes.Eq (Data.Vinyl.Core.Rec f as)) => GHC.Classes.Eq (Data.Type.Functor.Product.NERec f (a2 'GHC.Base.:| as))
 instance forall a1 (f :: a1 -> *) (a2 :: a1) (as :: [a1]). (GHC.Classes.Ord (f a2), GHC.Classes.Ord (Data.Vinyl.Core.Rec f as)) => GHC.Classes.Ord (Data.Type.Functor.Product.NERec f (a2 'GHC.Base.:| as))
 instance forall j k (as :: (j, k)) (a :: k). GHC.Show.Show (Data.Type.Functor.Product.ISnd as a)
-instance forall k j (a :: j) (b :: k). GHC.Read.Read (Data.Type.Functor.Product.ISnd '(a, b) b)
+instance forall j k (a :: j) (b :: k). GHC.Read.Read (Data.Type.Functor.Product.ISnd '(a, b) b)
 instance forall j k (as :: (j, k)) (a :: k). GHC.Classes.Eq (Data.Type.Functor.Product.ISnd as a)
 instance forall j k (as :: (j, k)) (a :: k). GHC.Classes.Ord (Data.Type.Functor.Product.ISnd as a)
 instance forall j k (as :: (j, k)) (a :: k) (i :: Data.Type.Functor.Product.ISnd as a). GHC.Show.Show (Data.Type.Functor.Product.SISnd as a i)
-instance forall k j (w :: j) (f :: k -> *) (a :: k). (GHC.Show.Show (Data.Singletons.Internal.Sing w), GHC.Show.Show (f a)) => GHC.Show.Show (Data.Type.Functor.Product.PTup f '(w, a))
-instance forall k j (w :: j) (f :: k -> *) (a :: k). (GHC.Read.Read (Data.Singletons.Internal.Sing w), GHC.Read.Read (f a)) => GHC.Read.Read (Data.Type.Functor.Product.PTup f '(w, a))
-instance forall k j (w :: j) (f :: k -> *) (a :: k). (GHC.Classes.Eq (Data.Singletons.Internal.Sing w), GHC.Classes.Eq (f a)) => GHC.Classes.Eq (Data.Type.Functor.Product.PTup f '(w, a))
-instance forall k j (w :: j) (f :: k -> *) (a :: k). (GHC.Classes.Ord (Data.Singletons.Internal.Sing w), GHC.Classes.Ord (f a)) => GHC.Classes.Ord (Data.Type.Functor.Product.PTup f '(w, a))
+instance forall j k (w :: j) (f :: k -> *) (a :: k). (GHC.Show.Show (Data.Singletons.Internal.Sing w), GHC.Show.Show (f a)) => GHC.Show.Show (Data.Type.Functor.Product.PTup f '(w, a))
+instance forall j k (w :: j) (f :: k -> *) (a :: k). (GHC.Read.Read (Data.Singletons.Internal.Sing w), GHC.Read.Read (f a)) => GHC.Read.Read (Data.Type.Functor.Product.PTup f '(w, a))
+instance forall j k (w :: j) (f :: k -> *) (a :: k). (GHC.Classes.Eq (Data.Singletons.Internal.Sing w), GHC.Classes.Eq (f a)) => GHC.Classes.Eq (Data.Type.Functor.Product.PTup f '(w, a))
+instance forall j k (w :: j) (f :: k -> *) (a :: k). (GHC.Classes.Ord (Data.Singletons.Internal.Sing w), GHC.Classes.Ord (f a)) => GHC.Classes.Ord (Data.Type.Functor.Product.PTup f '(w, a))
 instance forall k (as :: Data.Functor.Identity.Identity k) (a :: k). GHC.Show.Show (Data.Type.Functor.Product.IIdentity as a)
 instance forall k (a :: k). GHC.Read.Read (Data.Type.Functor.Product.IIdentity ('Data.Functor.Identity.Identity a) a)
 instance forall k (as :: Data.Functor.Identity.Identity k) (a :: k). GHC.Classes.Eq (Data.Type.Functor.Product.IIdentity as a)
@@ -391,7 +370,7 @@ instance Data.Type.Functor.Product.FProd ((,) j)
 instance forall k j (w :: j) (a :: k). Data.Singletons.Internal.SingI w => Data.Type.Functor.Product.PureProd ((,) j) '(w, a)
 instance forall k j (w :: j) (c :: k -> GHC.Types.Constraint) (a :: k). (Data.Singletons.Internal.SingI w, c a) => Data.Type.Functor.Product.PureProdC ((,) j) c '(w, a)
 instance forall k (c :: * -> GHC.Types.Constraint) (g :: k -> *) (a :: k) j (w :: j). c (g a) => Data.Type.Functor.Product.ReifyConstraintProd ((,) j) c g '(w, a)
-instance forall j (a :: j) k (b :: k). Data.Singletons.Internal.SingI 'Data.Type.Functor.Product.ISnd
+instance forall j k (a :: j) (b :: k). Data.Singletons.Internal.SingI 'Data.Type.Functor.Product.ISnd
 instance forall j k (as :: (j, k)) (a :: k). Data.Singletons.Internal.SingKind (Data.Type.Functor.Product.ISnd as a)
 instance forall j k (as :: (j, k)) (a :: k). Data.Singletons.Decide.SDecide (Data.Type.Functor.Product.ISnd as a)
 instance Data.Type.Functor.Product.FProd GHC.Base.NonEmpty
@@ -399,7 +378,7 @@ instance forall k (as :: [k]) (a :: k). Data.Vinyl.Core.RecApplicative as => Dat
 instance forall a1 (c :: a1 -> GHC.Types.Constraint) (a2 :: a1) (as :: [a1]). (c a2, Data.Vinyl.Core.RPureConstrained c as) => Data.Type.Functor.Product.PureProdC GHC.Base.NonEmpty c (a2 'GHC.Base.:| as)
 instance forall a1 (c :: * -> GHC.Types.Constraint) (g :: a1 -> *) (a2 :: a1) (as :: [a1]). (c (g a2), Data.Vinyl.Core.ReifyConstraint c g as) => Data.Type.Functor.Product.ReifyConstraintProd GHC.Base.NonEmpty c g (a2 'GHC.Base.:| as)
 instance forall k (a :: k) (as :: [k]). Data.Singletons.Internal.SingI 'Data.Type.Functor.Product.NEHead
-instance forall k (b :: k) (as :: [k]) (a :: k) (i :: Data.Type.Functor.Product.Index as a). Data.Singletons.Internal.SingI i => Data.Singletons.Internal.SingI ('Data.Type.Functor.Product.NETail i)
+instance forall k (as :: [k]) (a :: k) (b :: k) (i :: Data.Type.Functor.Product.Index as a). Data.Singletons.Internal.SingI i => Data.Singletons.Internal.SingI ('Data.Type.Functor.Product.NETail i)
 instance forall k (as :: GHC.Base.NonEmpty k) (a :: k). Data.Singletons.Internal.SingKind (Data.Type.Functor.Product.NEIndex as a)
 instance forall k (as :: GHC.Base.NonEmpty k) (a :: k). Data.Singletons.Decide.SDecide (Data.Type.Functor.Product.NEIndex as a)
 instance forall k j (f :: k -> *) (as :: Data.Either.Either j k). (Data.Singletons.Prelude.Show.SShow j, Data.Type.Functor.Product.ReifyConstraintProd (Data.Either.Either j) GHC.Show.Show f as) => GHC.Show.Show (Data.Type.Functor.Product.PEither f as)
@@ -427,7 +406,7 @@ instance forall k (a :: k). Data.Singletons.Internal.SingI 'Data.Type.Functor.Pr
 instance forall k (as :: GHC.Maybe.Maybe k) (a :: k). Data.Singletons.Internal.SingKind (Data.Type.Functor.Product.IJust as a)
 instance forall k (as :: GHC.Maybe.Maybe k) (a :: k). Data.Singletons.Decide.SDecide (Data.Type.Functor.Product.IJust as a)
 instance forall k (a :: k) (as :: [k]). Data.Singletons.Internal.SingI 'Data.Type.Functor.Product.IZ
-instance forall k (b :: k) (bs :: [k]) (a :: k) (i :: Data.Type.Functor.Product.Index bs a). Data.Singletons.Internal.SingI i => Data.Singletons.Internal.SingI ('Data.Type.Functor.Product.IS i)
+instance forall k (bs :: [k]) (a :: k) (b :: k) (i :: Data.Type.Functor.Product.Index bs a). Data.Singletons.Internal.SingI i => Data.Singletons.Internal.SingI ('Data.Type.Functor.Product.IS i)
 instance forall k (as :: [k]) (a :: k). Data.Singletons.Internal.SingKind (Data.Type.Functor.Product.Index as a)
 instance forall k (as :: [k]) (a :: k). Data.Singletons.Decide.SDecide (Data.Type.Functor.Product.Index as a)
 instance Data.Type.Functor.Product.FProd []
@@ -500,29 +479,29 @@ foldMapProdX :: forall f g m as. (FProd f, Monoid m) => (forall a. HKD g a -> m)
 --   situations.
 ifoldMapProdX :: forall f g m as. (FProd f, Monoid m) => (forall a. Elem f as a -> HKD g a -> m) -> XProd f g as -> m
 type XRec (f :: u -> Type) = Rec XData f
-pattern (::&) :: forall a (f :: a -> Type) (r :: a) (rs :: [a]). () => () => HKD f r -> XRec f rs -> XRec f (r : rs)
+pattern (::&) :: forall a (f :: a -> Type) (r :: a) rs. HKD f r -> XRec f rs -> XRec f (r : rs)
 infixr 7 ::&
-pattern XRNil :: forall u (f :: u -> Type). () => () => XRec f ([] :: [u])
+pattern XRNil :: forall u (f :: u -> Type). XRec f ('[] :: [u])
 
 -- | <a>PMaybe</a> over <a>HKD</a>-d types.
 type XMaybe f = PMaybe (XData f)
 
 -- | <a>PNothing</a> for <a>XMaybe</a>.
-pattern XNothing :: XMaybe f  'Nothing
+pattern XNothing :: XMaybe f 'Nothing
 
 -- | <a>PJust</a> for <a>XMaybe</a>: allows you to provide the simplified
 --   type.
-pattern XJust :: HKD f a -> XMaybe f ( 'Just a)
+pattern XJust :: HKD f a -> XMaybe f ('Just a)
 
 -- | <a>PEither</a> over <a>HKD</a>-d types.
 type XEither f = PEither (XData f)
 
 -- | <a>PLeft</a> for <a>XEither</a>.
-pattern XLeft :: Sing e -> XEither f ( 'Left e)
+pattern XLeft :: Sing e -> XEither f ('Left e)
 
 -- | <a>PRight</a> for <a>XEither</a>: allows you to provide the simplified
 --   type.
-pattern XRight :: HKD f a -> XEither f ( 'Right a)
+pattern XRight :: HKD f a -> XEither f ('Right a)
 
 -- | <a>NERec</a> over <a>HKD</a>-d types.
 type XNERec f = NERec (XData f)
@@ -543,4 +522,4 @@ type XIdentity f = PIdentity (XData f)
 
 -- | A version of <a>PIdentity</a> that allows you to provide the
 --   simplified type, for <a>XIdentity</a>.
-pattern XIdentity :: HKD f a -> XIdentity f ( 'Identity a)
+pattern XIdentity :: HKD f a -> XIdentity f ('Identity a)
