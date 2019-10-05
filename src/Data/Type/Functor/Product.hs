@@ -67,7 +67,6 @@ module Data.Type.Functor.Product (
   , rElemIndex, indexRElem, toCoRec
   -- * Singletons
   , SIndex(..), SIJust(..), SIRight(..), SNEIndex(..), SISnd(..), SIIdentity(..)
-  , Sing (SIndex', SIJust', SIRight', SNEIndex', SISnd', SIIdentity')
   -- * Defunctionalization symbols
   , ElemSym0, ElemSym1, ElemSym2
   , ProdSym0, ProdSym1, ProdSym2
@@ -170,17 +169,17 @@ class (PFunctor f, SFunctor f, PFoldable f, SFoldable f) => FProd (f :: Type -> 
         -> r
 
 -- | Create @'Prod' f@ if you can give a @g a@ for every slot.
-class PureProd (f :: Type -> Type) (as :: f k) where
+class PureProd f as where
     pureProd :: (forall a. g a) -> Prod f g as
 
 -- | Create @'Prod' f@ if you can give a @g a@ for every slot, given some
 -- constraint.
-class PureProdC (f :: Type -> Type) c (as :: f k) where
+class PureProdC f c as where
     pureProdC :: (forall a. c a => g a) -> Prod f g as
 
 -- | Pair up each item in a @'Prod' f@ with a witness that @f a@ satisfies
 -- some constraint.
-class ReifyConstraintProd (f :: Type -> Type) c (g :: k -> Type) (as :: f k) where
+class ReifyConstraintProd f c g as where
     reifyConstraintProd :: Prod f g as -> Prod f (Dict c V.:. g) as
 
 data ElemSym0 (f :: Type -> Type) :: f k ~> k ~> Type
@@ -378,35 +377,27 @@ deriving instance Show (Index as a)
 deriving instance Eq (Index as a)
 deriving instance Ord (Index as a)
 
--- | Kind-indexed singleton for 'Index'.  Provided as a separate data
--- declaration to allow you to use these at the type level.  However, the
--- main interface is still provided through the newtype wrapper 'SIndex'',
--- which has an actual proper 'Sing' instance.
+-- | Kind-indexed singleton for 'Index'.
 data SIndex as a :: Index as a -> Type where
     SIZ :: SIndex (a ': as) a 'IZ
     SIS :: SIndex bs a i -> SIndex (b ': bs) a ('IS i)
 
 deriving instance Show (SIndex as a i)
 
-newtype instance Sing (i :: Index as a) where
-    SIndex' :: SIndex as a i -> Sing i
+type instance Sing = SIndex as a :: Index as a -> Type
 
 instance SingI 'IZ where
-    sing = SIndex' SIZ
+    sing = SIZ
 
 instance SingI i => SingI ('IS i) where
-    sing = case sing of
-      SIndex' i -> SIndex' (SIS i)
+    sing = SIS sing
 
 instance SingKind (Index as a) where
     type Demote (Index as a) = Index as a
-    fromSing (SIndex' i) = go i
-      where
-        go :: SIndex bs b i -> Index bs b
-        go = \case
-          SIZ   -> IZ
-          SIS j -> IS (go j)
-    toSing i = go i (SomeSing . SIndex')
+    fromSing = \case
+       SIZ   -> IZ
+       SIS j -> IS (fromSing j)
+    toSing i = go i SomeSing
       where
         go :: Index bs b -> (forall i. SIndex bs b i -> r) -> r
         go = \case
@@ -414,18 +405,15 @@ instance SingKind (Index as a) where
           IS j -> \f -> go j (f . SIS)
 
 instance SDecide (Index as a) where
-    SIndex' i %~ SIndex' j = go i j
-      where
-        go :: SIndex bs b i -> SIndex bs b j -> Decision (i :~: j)
-        go = \case
-          SIZ -> \case
-            SIZ   -> Proved Refl
-            SIS _ -> Disproved $ \case {}
-          SIS i' -> \case
-            SIZ   -> Disproved $ \case {}
-            SIS j' -> case go i' j' of
-              Proved Refl -> Proved Refl
-              Disproved v -> Disproved $ \case Refl -> v Refl
+    (%~) = \case
+      SIZ -> \case
+        SIZ   -> Proved Refl
+        SIS _ -> Disproved $ \case {}
+      SIS i' -> \case
+        SIZ   -> Disproved $ \case {}
+        SIS j' -> case i' %~ j' of
+          Proved Refl -> Proved Refl
+          Disproved v -> Disproved $ \case Refl -> v Refl
 
 instance FProd [] where
     type Elem [] = Index
@@ -529,30 +517,24 @@ deriving instance Read (IJust ('Just a) a)
 deriving instance Eq (IJust as a)
 deriving instance Ord (IJust as a)
 
--- | Kind-indexed singleton for 'IJust'.  Provided as a separate data
--- declaration to allow you to use these at the type level.  However, the
--- main interface is still provided through the newtype wrapper 'SIJust'',
--- which has an actual proper 'Sing' instance.
---
--- This distinction will be unnecessary once 'Sing' is a type family.
+-- | Kind-indexed singleton for 'IJust'.
 data SIJust as a :: IJust as a -> Type where
     SIJust :: SIJust ('Just a) a 'IJust
 
 deriving instance Show (SIJust as a i)
 
-newtype instance Sing (i :: IJust as a) where
-    SIJust' :: SIJust as a i -> Sing i
+type instance Sing = SIJust as a :: IJust as a -> Type
 
 instance SingI 'IJust where
-    sing = SIJust' SIJust
+    sing = SIJust
 
 instance SingKind (IJust as a) where
     type Demote (IJust as a) = IJust as a
-    fromSing (SIJust' SIJust) = IJust
-    toSing IJust = SomeSing (SIJust' SIJust)
+    fromSing SIJust = IJust
+    toSing IJust = SomeSing SIJust
 
 instance SDecide (IJust as a) where
-    SIJust' SIJust %~ SIJust' SIJust = Proved Refl
+    SIJust %~ SIJust = Proved Refl
 
 -- | A @'PMaybe' f 'Nothing@ contains nothing, and a @'PMaybe' f ('Just a)@
 -- contains an @f a@.
@@ -632,28 +614,24 @@ deriving instance Read (IRight ('Right a) a)
 deriving instance Eq (IRight as a)
 deriving instance Ord (IRight as a)
 
--- | Kind-indexed singleton for 'IRight'.  Provided as a separate data
--- declaration to allow you to use these at the type level.  However, the
--- main interface is still provided through the newtype wrapper 'SIRight'',
--- which has an actual proper 'Sing' instance.
+-- | Kind-indexed singleton for 'IRight'.
 data SIRight as a :: IRight as a -> Type where
     SIRight :: SIRight ('Right a) a 'IRight
 
 deriving instance Show (SIRight as a i)
 
-newtype instance Sing (i :: IRight as a) where
-    SIRight' :: SIRight as a i -> Sing i
+type instance Sing = SIRight as a :: IRight as a -> Type
 
 instance SingI 'IRight where
-    sing = SIRight' SIRight
+    sing = SIRight
 
 instance SingKind (IRight as a) where
     type Demote (IRight as a) = IRight as a
-    fromSing (SIRight' SIRight) = IRight
-    toSing IRight = SomeSing (SIRight' SIRight)
+    fromSing SIRight = IRight
+    toSing IRight = SomeSing SIRight
 
 instance SDecide (IRight as a) where
-    SIRight' SIRight %~ SIRight' SIRight = Proved Refl
+    SIRight %~ SIRight = Proved Refl
 
 -- | A @'PEither' f ('Left e)@ contains @'Sing' e@, and a @'PMaybe' f ('Right a)@
 -- contains an @f a@.
@@ -732,44 +710,38 @@ deriving instance Show (NEIndex as a)
 deriving instance Eq (NEIndex as a)
 deriving instance Ord (NEIndex as a)
 
--- | Kind-indexed singleton for 'NEIndex'.  Provided as a separate data
--- declaration to allow you to use these at the type level.  However, the
--- main interface is still provided through the newtype wrapper
--- 'SNEIndex'', which has an actual proper 'Sing' instance.
+-- | Kind-indexed singleton for 'NEIndex'.
 data SNEIndex as a :: NEIndex as a -> Type where
     SNEHead :: SNEIndex (a ':| as) a 'NEHead
     SNETail :: SIndex as a i -> SNEIndex (b ':| as) a ('NETail i)
 
 deriving instance Show (SNEIndex as a i)
 
-newtype instance Sing (i :: NEIndex as a) where
-    SNEIndex' :: SNEIndex as a i -> Sing i
+type instance Sing = SNEIndex as a :: NEIndex as a -> Type
 
 instance SingI 'NEHead where
-    sing = SNEIndex' SNEHead
+    sing = SNEHead
 
 instance SingI i => SingI ('NETail i) where
-    sing = case sing of
-      SIndex' i -> SNEIndex' (SNETail i)
+    sing = SNETail sing
 
 instance SingKind (NEIndex as a) where
     type Demote (NEIndex as a) = NEIndex as a
     fromSing = \case
-      SNEIndex' SNEHead     -> NEHead
-      SNEIndex' (SNETail i) -> NETail $ fromSing (SIndex' i)
+      SNEHead   -> NEHead
+      SNETail i -> NETail $ fromSing i
     toSing = \case
-      NEHead   -> SomeSing (SNEIndex' SNEHead)
-      NETail i -> withSomeSing i $ \case
-        SIndex' j -> SomeSing (SNEIndex' (SNETail j))
+      NEHead   -> SomeSing SNEHead
+      NETail i -> withSomeSing i $ SomeSing . SNETail
 
 instance SDecide (NEIndex as a) where
     (%~) = \case
-      SNEIndex' SNEHead -> \case
-        SNEIndex' SNEHead     -> Proved Refl
-        SNEIndex' (SNETail _) -> Disproved $ \case {}
-      SNEIndex' (SNETail i) -> \case
-        SNEIndex' SNEHead -> Disproved $ \case {}
-        SNEIndex' (SNETail j) -> case SIndex' i %~ SIndex' j of
+      SNEHead -> \case
+        SNEHead   -> Proved Refl
+        SNETail _ -> Disproved $ \case {}
+      SNETail i -> \case
+        SNEHead -> Disproved $ \case {}
+        SNETail j -> case i %~ j of
           Proved Refl -> Proved Refl
           Disproved v -> Disproved $ \case Refl -> v Refl
 
@@ -869,28 +841,24 @@ deriving instance Read (ISnd '(a, b) b)
 deriving instance Eq (ISnd as a)
 deriving instance Ord (ISnd as a)
 
--- | Kind-indexed singleton for 'ISnd'.  Provided as a separate data
--- declaration to allow you to use these at the type level.  However, the
--- main interface is still provided through the newtype wrapper 'SISnd'',
--- which has an actual proper 'Sing' instance.
+-- | Kind-indexed singleton for 'ISnd'.
 data SISnd as a :: ISnd as a -> Type where
     SISnd :: SISnd '(a, b) b 'ISnd
 
 deriving instance Show (SISnd as a i)
 
-newtype instance Sing (i :: ISnd as a) where
-    SISnd' :: SISnd as a i -> Sing i
+type instance Sing = SISnd as a :: ISnd as a -> Type
 
 instance SingI 'ISnd where
-    sing = SISnd' SISnd
+    sing = SISnd
 
 instance SingKind (ISnd as a) where
     type Demote (ISnd as a) = ISnd as a
-    fromSing (SISnd' SISnd) = ISnd
-    toSing ISnd = SomeSing (SISnd' SISnd)
+    fromSing SISnd = ISnd
+    toSing ISnd = SomeSing SISnd
 
 instance SDecide (ISnd as a) where
-    SISnd' SISnd %~ SISnd' SISnd = Proved Refl
+    SISnd %~ SISnd = Proved Refl
 
 -- | A 'PTup' tuples up some singleton with some value; a @'PTup' f '(w,
 -- a)@ contains a @'Sing' w@ and an @f a@.
@@ -950,19 +918,18 @@ data SIIdentity as a :: IIdentity as a -> Type where
 
 deriving instance Show (SIIdentity as a i)
 
-newtype instance Sing (i :: IIdentity as a) where
-    SIIdentity' :: SIIdentity as a i -> Sing i
+type instance Sing = SIIdentity as a :: IIdentity as a -> Type
 
 instance SingI 'IId where
-    sing = SIIdentity' SIId
+    sing = SIId
 
 instance SingKind (IIdentity as a) where
     type Demote (IIdentity as a) = IIdentity as a
-    fromSing (SIIdentity' SIId) = IId
-    toSing IId = SomeSing (SIIdentity' SIId)
+    fromSing SIId = IId
+    toSing IId = SomeSing SIId
 
 instance SDecide (IIdentity as a) where
-    SIIdentity' SIId %~ SIIdentity' SIId = Proved Refl
+    SIId %~ SIId = Proved Refl
 
 -- | A 'PIdentity' is a trivial functor product; it is simply the functor,
 -- itself, alone.  @'PIdentity' f ('Identity' a)@ is simply @f a@.  This

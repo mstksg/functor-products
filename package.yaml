@@ -28,7 +28,7 @@ ghc-options:
 dependencies:
 - base >= 4.7 && < 5
 - microlens
-- singletons >= 2.5
+- singletons >= 2.6
 - text
 - vinyl
 

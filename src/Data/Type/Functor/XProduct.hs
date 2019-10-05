@@ -48,6 +48,7 @@ module Data.Type.Functor.XProduct (
 import           Data.Functor.Identity
 import           Data.Kind
 import           Data.List.NonEmpty        (NonEmpty(..))
+import           Data.Singletons
 import           Data.Type.Functor.Product
 import           Data.Vinyl
 import           Data.Vinyl.XRec
