@@ -26,7 +26,7 @@ ghc-options:
 - -Werror=incomplete-patterns
 
 dependencies:
-- base >= 4.13
+- base >= 4.13 && < 5
 - microlens
 - singletons >= 2.6
 - text
