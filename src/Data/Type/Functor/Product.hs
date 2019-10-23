@@ -907,10 +907,7 @@ deriving instance Read (IIdentity ('Identity a) a)
 deriving instance Eq (IIdentity as a)
 deriving instance Ord (IIdentity as a)
 
--- | Kind-indexed singleton for 'IIdentity'.  Provided as a separate data
--- declaration to allow you to use these at the type level.  However, the
--- main interface is still provided through the newtype wrapper 'SIIdentity'',
--- which has an actual proper 'Sing' instance.
+-- | Kind-indexed singleton for 'IIdentity'.
 --
 -- @since 0.1.5.0
 data SIIdentity as a :: IIdentity as a -> Type where
