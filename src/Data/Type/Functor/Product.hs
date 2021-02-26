@@ -378,8 +378,8 @@ deriving instance Eq (Index as a)
 deriving instance Ord (Index as a)
 
 -- | Kind-indexed singleton for 'Index'.
-data SIndex as a :: Index as a -> Type where
-    SIZ :: SIndex (a ': as) a 'IZ
+data SIndex (as :: [r]) (a :: r) :: Index as a -> Type where
+    SIZ ::                  SIndex (a ': as) a 'IZ
     SIS :: SIndex bs a i -> SIndex (b ': bs) a ('IS i)
 
 deriving instance Show (SIndex as a i)
@@ -518,7 +518,7 @@ deriving instance Eq (IJust as a)
 deriving instance Ord (IJust as a)
 
 -- | Kind-indexed singleton for 'IJust'.
-data SIJust as a :: IJust as a -> Type where
+data SIJust (as :: Maybe k) (a :: k) :: IJust as a -> Type where
     SIJust :: SIJust ('Just a) a 'IJust
 
 deriving instance Show (SIJust as a i)
@@ -615,7 +615,7 @@ deriving instance Eq (IRight as a)
 deriving instance Ord (IRight as a)
 
 -- | Kind-indexed singleton for 'IRight'.
-data SIRight as a :: IRight as a -> Type where
+data SIRight (as :: Either j k) (a :: k) :: IRight as a -> Type where
     SIRight :: SIRight ('Right a) a 'IRight
 
 deriving instance Show (SIRight as a i)
@@ -711,7 +711,7 @@ deriving instance Eq (NEIndex as a)
 deriving instance Ord (NEIndex as a)
 
 -- | Kind-indexed singleton for 'NEIndex'.
-data SNEIndex as a :: NEIndex as a -> Type where
+data SNEIndex (as :: NonEmpty k) (a :: k) :: NEIndex as a -> Type where
     SNEHead :: SNEIndex (a ':| as) a 'NEHead
     SNETail :: SIndex as a i -> SNEIndex (b ':| as) a ('NETail i)
 
@@ -842,7 +842,7 @@ deriving instance Eq (ISnd as a)
 deriving instance Ord (ISnd as a)
 
 -- | Kind-indexed singleton for 'ISnd'.
-data SISnd as a :: ISnd as a -> Type where
+data SISnd (as :: (j, k)) (a :: k) :: ISnd as a -> Type where
     SISnd :: SISnd '(a, b) b 'ISnd
 
 deriving instance Show (SISnd as a i)
@@ -910,7 +910,7 @@ deriving instance Ord (IIdentity as a)
 -- | Kind-indexed singleton for 'IIdentity'.
 --
 -- @since 0.1.5.0
-data SIIdentity as a :: IIdentity as a -> Type where
+data SIIdentity (as :: Identity k) (a :: k) :: IIdentity as a -> Type where
     SIId :: SIIdentity ('Identity a) a 'IId
 
 deriving instance Show (SIIdentity as a i)
@@ -987,14 +987,13 @@ toCoRec = \case
 -- that would require @'RElem' a as ('V.RIndex' as a)@.  Along with
 -- 'rElemIndex', this essentially converts between the indexing system in
 -- this library and the indexing system of /vinyl/.
-indexRElem
-    :: (SDecide k, SingI (a :: k), RecApplicative as, FoldRec as as)
+indexRElem :: (SDecide k, SingI (a :: k), RecApplicative as, FoldRec as as)
     => Index as a
     -> (RElem a as (V.RIndex a as) => r)
     -> r
 indexRElem i = case toCoRec i x of
     CoRec y -> case x %~ y of
       Proved Refl -> id
-      Disproved _ -> errorWithoutStackTrace "why :|"
+      Disproved _ -> \_ -> (errorWithoutStackTrace "why :|")
   where
     x = sing
