@@ -81,16 +81,16 @@ import           Data.Maybe
 import           Data.Semigroup
 import           Data.Singletons
 import           Data.Singletons.Decide
-import           Data.Singletons.Prelude hiding          (Elem, ElemSym0, ElemSym1, ElemSym2)
-import           Data.Singletons.Prelude.Foldable hiding (Elem, ElemSym0, ElemSym1, ElemSym2)
-import           Data.Singletons.Prelude.Identity
+import           Prelude.Singletons hiding               (Elem, ElemSym0, ElemSym1, ElemSym2)
+import           Data.Foldable.Singletons hiding         (Elem, ElemSym0, ElemSym1, ElemSym2)
+import           Data.Functor.Identity.Singletons
 import           Data.Vinyl hiding                       ((:~:))
 import           Data.Vinyl.CoRec
 import           GHC.Generics                            ((:*:)(..))
 import           Lens.Micro hiding                       ((%~))
 import           Lens.Micro.Extras
 import           Unsafe.Coerce
-import qualified Data.Singletons.Prelude.List.NonEmpty   as NE
+import qualified Data.List.NonEmpty.Singletons           as NE
 import qualified Data.Text                               as T
 import qualified Data.Vinyl.Functor                      as V
 import qualified Data.Vinyl.TypeLevel                    as V
