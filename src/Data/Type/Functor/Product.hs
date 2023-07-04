@@ -1,25 +1,25 @@
-{-# LANGUAGE AllowAmbiguousTypes    #-}
-{-# LANGUAGE ConstraintKinds        #-}
-{-# LANGUAGE DeriveGeneric          #-}
-{-# LANGUAGE DeriveTraversable      #-}
-{-# LANGUAGE EmptyCase              #-}
-{-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GADTs                  #-}
-{-# LANGUAGE InstanceSigs           #-}
-{-# LANGUAGE KindSignatures         #-}
-{-# LANGUAGE LambdaCase             #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE RankNTypes             #-}
-{-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE StandaloneDeriving     #-}
-{-# LANGUAGE TypeApplications       #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE TypeInType             #-}
-{-# LANGUAGE TypeOperators          #-}
-{-# LANGUAGE UndecidableInstances   #-}
-{-# LANGUAGE ViewPatterns           #-}
+{-# LANGUAGE AllowAmbiguousTypes      #-}
+{-# LANGUAGE ConstraintKinds          #-}
+{-# LANGUAGE DeriveGeneric            #-}
+{-# LANGUAGE DeriveTraversable        #-}
+{-# LANGUAGE EmptyCase                #-}
+{-# LANGUAGE FlexibleContexts         #-}
+{-# LANGUAGE FlexibleInstances        #-}
+{-# LANGUAGE FunctionalDependencies   #-}
+{-# LANGUAGE GADTs                    #-}
+{-# LANGUAGE InstanceSigs             #-}
+{-# LANGUAGE KindSignatures           #-}
+{-# LANGUAGE LambdaCase               #-}
+{-# LANGUAGE MultiParamTypeClasses    #-}
+{-# LANGUAGE RankNTypes               #-}
+{-# LANGUAGE ScopedTypeVariables      #-}
+{-# LANGUAGE StandaloneDeriving       #-}
+{-# LANGUAGE TypeApplications         #-}
+{-# LANGUAGE TypeFamilyDependencies   #-}
+{-# LANGUAGE TypeInType               #-}
+{-# LANGUAGE TypeOperators            #-}
+{-# LANGUAGE UndecidableInstances     #-}
+{-# LANGUAGE ViewPatterns             #-}
 
 -- |
 -- Module      : Data.Type.Functor.Product
@@ -73,27 +73,33 @@ module Data.Type.Functor.Product (
   ) where
 
 import           Control.Applicative
+import           Data.Either.Singletons
+import           Data.Foldable.Singletons hiding  (Elem, ElemSym0, ElemSym1, ElemSym2)
+import           Data.Function.Singletons
 import           Data.Functor.Classes
 import           Data.Functor.Identity
+import           Data.Functor.Identity.Singletons
+import           Data.Functor.Singletons
 import           Data.Kind
-import           Data.List.NonEmpty                      (NonEmpty(..))
+import           Data.List.NonEmpty               (NonEmpty(..))
+import           Data.List.Singletons hiding      (Elem, ElemSym0, ElemSym1, ElemSym2)
 import           Data.Maybe
+import           Data.Maybe.Singletons
 import           Data.Semigroup
 import           Data.Singletons
 import           Data.Singletons.Decide
-import           Data.Singletons.Prelude hiding          (Elem, ElemSym0, ElemSym1, ElemSym2)
-import           Data.Singletons.Prelude.Foldable hiding (Elem, ElemSym0, ElemSym1, ElemSym2)
-import           Data.Singletons.Prelude.Identity
-import           Data.Vinyl hiding                       ((:~:))
+import           Data.Tuple.Singletons
+import           Data.Vinyl hiding                ((:~:))
 import           Data.Vinyl.CoRec
-import           GHC.Generics                            ((:*:)(..))
-import           Lens.Micro hiding                       ((%~))
+import           GHC.Generics                     ((:*:)(..))
+import           Lens.Micro hiding                ((%~))
 import           Lens.Micro.Extras
+import           Text.Show.Singletons
 import           Unsafe.Coerce
-import qualified Data.Singletons.Prelude.List.NonEmpty   as NE
-import qualified Data.Text                               as T
-import qualified Data.Vinyl.Functor                      as V
-import qualified Data.Vinyl.TypeLevel                    as V
+import qualified Data.List.NonEmpty.Singletons    as NE
+import qualified Data.Text                        as T
+import qualified Data.Vinyl.Functor               as V
+import qualified Data.Vinyl.TypeLevel             as V
 
 fmapIdent :: Fmap IdSym0 as :~: as
 fmapIdent = unsafeCoerce Refl
@@ -378,7 +384,7 @@ deriving instance Eq (Index as a)
 deriving instance Ord (Index as a)
 
 -- | Kind-indexed singleton for 'Index'.
-data SIndex as a :: Index as a -> Type where
+data SIndex (as :: [k]) (a :: k) :: Index as a -> Type where
     SIZ :: SIndex (a ': as) a 'IZ
     SIS :: SIndex bs a i -> SIndex (b ': bs) a ('IS i)
 
@@ -518,7 +524,7 @@ deriving instance Eq (IJust as a)
 deriving instance Ord (IJust as a)
 
 -- | Kind-indexed singleton for 'IJust'.
-data SIJust as a :: IJust as a -> Type where
+data SIJust (as :: Maybe k) (a :: k) :: IJust as a -> Type where
     SIJust :: SIJust ('Just a) a 'IJust
 
 deriving instance Show (SIJust as a i)
@@ -615,7 +621,7 @@ deriving instance Eq (IRight as a)
 deriving instance Ord (IRight as a)
 
 -- | Kind-indexed singleton for 'IRight'.
-data SIRight as a :: IRight as a -> Type where
+data SIRight (as :: Either j k) (a :: k) :: IRight as a -> Type where
     SIRight :: SIRight ('Right a) a 'IRight
 
 deriving instance Show (SIRight as a i)
@@ -649,7 +655,6 @@ instance (SShow j, ReifyConstraintProd (Either j) Show f as) => Show (PEither f 
         PRight (V.Compose (Dict x)) -> showsUnaryWith showsPrec "PRight" d x
       where
         go (fromIntegral->FromSing i) x (T.pack->FromSing str) = T.unpack . fromSing $ sShowsPrec i x str
-        go _ _ _ = undefined
 
 instance FProd (Either j) where
     type instance Elem (Either j) = IRight
@@ -711,7 +716,7 @@ deriving instance Eq (NEIndex as a)
 deriving instance Ord (NEIndex as a)
 
 -- | Kind-indexed singleton for 'NEIndex'.
-data SNEIndex as a :: NEIndex as a -> Type where
+data SNEIndex (as :: NonEmpty k) (a :: k) :: NEIndex as a -> Type where
     SNEHead :: SNEIndex (a ':| as) a 'NEHead
     SNETail :: SIndex as a i -> SNEIndex (b ':| as) a ('NETail i)
 
@@ -842,7 +847,7 @@ deriving instance Eq (ISnd as a)
 deriving instance Ord (ISnd as a)
 
 -- | Kind-indexed singleton for 'ISnd'.
-data SISnd as a :: ISnd as a -> Type where
+data SISnd (as :: (j, k)) (a :: k) :: ISnd as a -> Type where
     SISnd :: SISnd '(a, b) b 'ISnd
 
 deriving instance Show (SISnd as a i)
@@ -910,7 +915,7 @@ deriving instance Ord (IIdentity as a)
 -- | Kind-indexed singleton for 'IIdentity'.
 --
 -- @since 0.1.5.0
-data SIIdentity as a :: IIdentity as a -> Type where
+data SIIdentity (as :: Identity k) (a :: k) :: IIdentity as a -> Type where
     SIId :: SIIdentity ('Identity a) a 'IId
 
 deriving instance Show (SIIdentity as a i)
@@ -970,7 +975,7 @@ rElemIndex = rgetC indices
 
 -- | Use an 'Index' to inject an @f a@ into a 'CoRec'.
 toCoRec
-    :: forall as a f. (RecApplicative as, FoldRec as as)
+    :: forall k (as :: [k]) a f. (RecApplicative as, FoldRec as as)
     => Index as a
     -> f a
     -> CoRec f as
@@ -995,6 +1000,6 @@ indexRElem
 indexRElem i = case toCoRec i x of
     CoRec y -> case x %~ y of
       Proved Refl -> id
-      Disproved _ -> errorWithoutStackTrace "why :|"
+      Disproved _ -> \_ -> errorWithoutStackTrace "why :|"
   where
     x = sing
