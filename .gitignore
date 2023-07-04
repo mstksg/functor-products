@@ -1,5 +1,4 @@
 .stack-work/
-functor-products.cabal
 dist-newstyle
 .ghc.environment*
 *~
