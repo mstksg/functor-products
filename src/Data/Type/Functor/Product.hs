@@ -647,12 +647,12 @@ instance FProd Maybe where
 instance PureProd Maybe 'Nothing where
   pureProd _ = PNothing
 instance PureProd Maybe ('Just a) where
-  pureProd x = PJust x
+  pureProd = PJust
 
 instance PureProdC Maybe c 'Nothing where
   pureProdC _ = PNothing
 instance c a => PureProdC Maybe c ('Just a) where
-  pureProdC x = PJust x
+  pureProdC = PJust
 
 instance ReifyConstraintProd Maybe c g 'Nothing where
   reifyConstraintProd PNothing = PNothing
@@ -742,12 +742,12 @@ instance FProd (Either j) where
 instance SingI e => PureProd (Either j) ('Left e) where
   pureProd _ = PLeft sing
 instance PureProd (Either j) ('Right a) where
-  pureProd x = PRight x
+  pureProd = PRight
 
 instance SingI e => PureProdC (Either j) c ('Left e) where
-  pureProdC _ = (PLeft sing)
+  pureProdC _ = PLeft sing
 instance c a => PureProdC (Either j) c ('Right a) where
-  pureProdC x = PRight x
+  pureProdC = PRight
 
 instance ReifyConstraintProd (Either j) c g ('Left e) where
   reifyConstraintProd (PLeft e) = PLeft e
@@ -839,7 +839,7 @@ withPureProdNE ::
   Rec f as ->
   ((RecApplicative as, PureProd NonEmpty (a ':| as)) => r) ->
   r
-withPureProdNE _ xs = withPureProdList xs
+withPureProdNE _ = withPureProdList
 
 instance RecApplicative as => PureProd NonEmpty (a ':| as) where
   pureProd x = x :&| pureProd x
@@ -944,10 +944,10 @@ instance FProd ((,) j) where
   withPureProd (PTup Sing _) x = x
 
 instance SingI w => PureProd ((,) j) '(w, a) where
-  pureProd x = PTup sing x
+  pureProd = PTup sing
 
 instance (SingI w, c a) => PureProdC ((,) j) c '(w, a) where
-  pureProdC x = PTup sing x
+  pureProdC = PTup sing
 
 instance c (g a) => ReifyConstraintProd ((,) j) c g '(w, a) where
   reifyConstraintProd (PTup w x) = PTup w $ V.Compose (Dict x)
@@ -1010,10 +1010,10 @@ instance FProd Identity where
   withPureProd (PIdentity _) x = x
 
 instance PureProd Identity ('Identity a) where
-  pureProd x = PIdentity x
+  pureProd = PIdentity
 
 instance c a => PureProdC Identity c ('Identity a) where
-  pureProdC x = PIdentity x
+  pureProdC = PIdentity
 
 instance c (g a) => ReifyConstraintProd Identity c g ('Identity a) where
   reifyConstraintProd (PIdentity x) = PIdentity $ V.Compose (Dict x)
