@@ -37,8 +37,14 @@
         };
       };
       defaultProject = mkProject ghcVersion;
+      allPackages = name: packages:
+        pkgs.symlinkJoin {
+          inherit name;
+          paths = pkgs.lib.mapAttrsToList (n: p: p) packages;
+        };
     in
     rec {
+      packages.default = allPackages "default" defaultProject.flake'.packages;
       apps = {
         format = {
           type = "app";
