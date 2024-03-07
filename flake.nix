@@ -39,17 +39,21 @@
       defaultProject = mkProject ghcVersion;
     in
     rec {
-      apps.format = {
-        type = "app";
-        program = toString (pkgs.writeShellApplication {
-          name = "formatHaskell.sh";
-          runtimeInputs = [ devShells.default ];
-          text = ''
-            # shellcheck disable=SC2046
-            fourmolu --mode inplace $(git ls-files '**/**.hs')
-          '';
-        }) + "/bin/formatHaskell.sh";
+      apps = {
+        format = {
+          type = "app";
+          program = toString
+            (pkgs.writeShellApplication {
+              name = "formatHaskell.sh";
+              runtimeInputs = [ devShells.default ];
+              text = ''
+                # shellcheck disable=SC2046
+                fourmolu --mode inplace $(git ls-files '**/**.hs')
+              '';
+            }) + "/bin/formatHaskell.sh";
+        };
       };
+      legacyPackages = defaultProject;
       devShells = defaultProject.flake'.devShells;
     }
     );
