@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Version 0.1.2.2
+---------------
+
+*May 19, 2023*
+
+<https://github.com/mstksg/functor-products/releases/tag/v0.1.2.2>
+
+*   Fix building on GHC 9.8
+
 Version 0.1.2.1
 ---------------
 

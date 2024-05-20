@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE EmptyCase #-}
@@ -435,7 +436,11 @@ data SIndex (as :: [k]) (a :: k) :: Index as a -> Type where
 
 deriving instance Show (SIndex as a i)
 
+#if __GLASGOW_HASKELL__ >= 908
+type instance forall as a. Sing = SIndex as a :: Index as a -> Type
+#else
 type instance Sing = SIndex as a :: Index as a -> Type
+#endif
 
 instance SingI 'IZ where
   sing = SIZ
@@ -578,7 +583,11 @@ data SIJust (as :: Maybe k) (a :: k) :: IJust as a -> Type where
 
 deriving instance Show (SIJust as a i)
 
+#if __GLASGOW_HASKELL__ >= 908
+type instance forall as a. Sing = SIJust as a :: IJust as a -> Type
+#else
 type instance Sing = SIJust as a :: IJust as a -> Type
+#endif
 
 instance SingI 'IJust where
   sing = SIJust
@@ -675,7 +684,11 @@ data SIRight (as :: Either j k) (a :: k) :: IRight as a -> Type where
 
 deriving instance Show (SIRight as a i)
 
+#if __GLASGOW_HASKELL__ >= 908
+type instance forall as a. Sing = SIRight as a :: IRight as a -> Type
+#else
 type instance Sing = SIRight as a :: IRight as a -> Type
+#endif
 
 instance SingI 'IRight where
   sing = SIRight
@@ -771,7 +784,11 @@ data SNEIndex (as :: NonEmpty k) (a :: k) :: NEIndex as a -> Type where
 
 deriving instance Show (SNEIndex as a i)
 
+#if __GLASGOW_HASKELL__ >= 908
+type instance forall as a. Sing = SNEIndex as a :: NEIndex as a -> Type
+#else
 type instance Sing = SNEIndex as a :: NEIndex as a -> Type
+#endif
 
 instance SingI 'NEHead where
   sing = SNEHead
@@ -903,7 +920,12 @@ data SISnd (as :: (j, k)) (a :: k) :: ISnd as a -> Type where
 
 deriving instance Show (SISnd as a i)
 
+#if __GLASGOW_HASKELL__ >= 908
+type instance forall as a. Sing = SISnd as a :: ISnd as a -> Type
+#else
 type instance Sing = SISnd as a :: ISnd as a -> Type
+#endif
+
 
 instance SingI 'ISnd where
   sing = SISnd
@@ -971,7 +993,11 @@ data SIIdentity (as :: Identity k) (a :: k) :: IIdentity as a -> Type where
 
 deriving instance Show (SIIdentity as a i)
 
+#if __GLASGOW_HASKELL__ >= 908
+type instance forall as a. Sing = SIIdentity as a :: IIdentity as a -> Type
+#else
 type instance Sing = SIIdentity as a :: IIdentity as a -> Type
+#endif
 
 instance SingI 'IId where
   sing = SIId

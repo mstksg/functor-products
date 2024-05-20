@@ -14,7 +14,7 @@
     flake-utils.lib.eachDefaultSystem (system:
     let
       projectName = "functor-products";
-      ghcVersion = "ghc964";
+      ghcVersion = "ghc982";
       overlays = [
         haskellNix.overlay
       ];
@@ -30,7 +30,7 @@
           withHoogle = false;
           tools = {
             cabal = { };
-            hlint = "3.6.1";
+            hlint = { };
             haskell-language-server = { };
             fourmolu = { };
           };
