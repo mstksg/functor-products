@@ -14,13 +14,20 @@
     flake-utils.lib.eachDefaultSystem (system:
     let
       projectName = "functor-products";
-      ghcVersion = "ghc982";
-      overlays = [
-        haskellNix.overlay
+      ghcVersions = [
+        # "ghc8107"
+        # "ghc902"
+        "ghc928"
+        "ghc948"
+        "ghc965"
+        "ghc982"
+        "ghc9101"
       ];
+      latestGhcVersion = pkgs.lib.lists.last ghcVersions;
       pkgs = import nixpkgs {
-        inherit system overlays;
+        inherit system;
         inherit (haskellNix) config;
+        overlays = [ haskellNix.overlay ];
       };
       mkProject = v: pkgs.haskell-nix.project' {
         name = projectName;
@@ -36,7 +43,9 @@
           };
         };
       };
-      defaultProject = mkProject ghcVersion;
+      defaultProject = mkProject latestGhcVersion;
+      allProjects = builtins.listToAttrs (builtins.map (u: { name = u; value = mkProject u; }) ghcVersions)
+        // { default = defaultProject; };
       allPackages = name: packages:
         pkgs.symlinkJoin {
           inherit name;
@@ -44,7 +53,7 @@
         };
     in
     rec {
-      packages.default = allPackages "default" defaultProject.flake'.packages;
+      packages = builtins.mapAttrs (n: p: allPackages n p.flake'.packages) allProjects;
       apps = {
         format = {
           type = "app";
@@ -59,8 +68,8 @@
             }) + "/bin/formatHaskell.sh";
         };
       };
-      legacyPackages = defaultProject;
-      devShells = defaultProject.flake'.devShells;
+      legacyPackages = pkgs // { "${projectName}" = builtins.mapAttrs (n: p: p.hsPkgs."${projectName}") allProjects; };
+      devShells = builtins.mapAttrs (n: p: p.flake'.devShells.default) allProjects;
     }
     );
 }
