@@ -23,7 +23,7 @@
         "ghc982"
         "ghc9101"
       ];
-      latestGhcVersion = pkgs.lib.lists.last ghcVersions;
+      latestGhcVersion = "ghc982";
       pkgs = import nixpkgs {
         inherit system;
         inherit (haskellNix) config;
