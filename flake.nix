@@ -12,24 +12,25 @@
     }:
     flake-utils.lib.eachDefaultSystem (system:
     let
+      name = "functor-products";
       pkgs = import nixpkgs {
         inherit system;
         overlays = [ haskellProjectFlake.overlays."${system}".default ];
       };
       project-flake = pkgs.haskell-project-flake
         {
-          name = "functor-products";
+          inherit name;
           src = ./.;
           excludeCompilerMajors = [ "ghc810" "ghc90" ];
           defaultCompiler = "ghc982";
         };
     in
-    rec {
+    {
       packages = project-flake.packages;
       apps = project-flake.apps;
       checks = project-flake.checks;
       devShells = project-flake.devShells;
-      legacyPackages.functor-products = project-flake;
+      legacyPackages."${name}" = project-flake;
     }
     );
 }
