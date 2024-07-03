@@ -926,7 +926,6 @@ type instance forall as a. Sing = SISnd as a :: ISnd as a -> Type
 type instance Sing = SISnd as a :: ISnd as a -> Type
 #endif
 
-
 instance SingI 'ISnd where
   sing = SISnd
 
